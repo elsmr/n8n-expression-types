@@ -37,7 +37,13 @@ var import_node_fs = require("node:fs");
 var import_node_path = __toESM(require("node:path"), 1);
 
 // ../core/globals.ts
-var EXPRESSION_CONTEXTS = ["nodeParameter", "httpPagination", "routing", "description", "credential"];
+var registry = /* @__PURE__ */ new Map();
+var defineContext = (definition) => {
+  registry.set(definition.name, definition);
+  return definition;
+};
+var contextNames = () => [...registry.keys()];
+var isContextName = (s) => registry.has(s ?? "");
 var emptyShape = (context = "nodeParameter") => ({ context, nodes: {} });
 var LOOSE = "N8nLooseJson";
 var or = (text) => text ?? LOOSE;
@@ -124,18 +130,20 @@ var pagination = (s) => `
 var credential = (s) => `
 	const $self: ${or(s.credentials)};`;
 var LAYERS = { core, item, description, routing, pagination, credential };
-var PROFILES = {
-  nodeParameter: ["core", "item"],
-  httpPagination: ["core", "item", "pagination"],
-  routing: ["core", "item", "routing"],
-  description: ["core", "description"],
-  credential: ["core", "credential"]
-};
-var buildGlobals = (s) => `
-declare global {${PROFILES[s.context].map((l) => LAYERS[l](s)).join("\n")}
+var buildGlobals = (s) => {
+  const definition = registry.get(s.context);
+  if (!definition) throw new Error(`Unknown expression context "${s.context}"`);
+  return `
+declare global {${definition.layers.map((l) => LAYERS[l](s)).join("\n")}
 }
 export {};
 `;
+};
+var nodeParameterContext = defineContext({ name: "nodeParameter", layers: ["core", "item"] });
+var httpPaginationContext = defineContext({ name: "httpPagination", layers: ["core", "item", "pagination"] });
+var routingContext = defineContext({ name: "routing", layers: ["core", "item", "routing"] });
+var descriptionContext = defineContext({ name: "description", layers: ["core", "description"] });
+var credentialContext = defineContext({ name: "credential", layers: ["core", "credential"] });
 
 // ../core/service.ts
 var BLOCK = /\{\{([\s\S]*?)\}\}/g;
@@ -275,7 +283,7 @@ var shapeFromType = (ts, checker, type, fallbackContext) => {
   };
   const contextType = prop(type, "context");
   const contextValue = contextType?.isStringLiteral() ? contextType.value : void 0;
-  const context = EXPRESSION_CONTEXTS.includes(contextValue ?? "") ? contextValue : fallbackContext;
+  const context = isContextName(contextValue) ? contextValue : fallbackContext;
   const input = prop(type, "input");
   const nodesType = prop(type, "nodes");
   const nodes = Object.fromEntries(
@@ -402,14 +410,14 @@ var enclosingValue = (ts, node) => {
 
 // ../core/expr.ts
 var resolvedKey = (context, expression) => `${context}::${expression}`;
-var make = (_context) => (expression) => expression;
+var make = (_name) => (expression) => expression;
 var expr = Object.assign(
   make("nodeParameter"),
-  Object.fromEntries(EXPRESSION_CONTEXTS.map((c) => [c, make(c)]))
+  Object.fromEntries(contextNames().map((n) => [n, make(n)]))
 );
 
 // ../core/scan.ts
-var isContext = (s) => EXPRESSION_CONTEXTS.includes(s ?? "");
+var isContext = isContextName;
 var PORTABLE_NAMES = /* @__PURE__ */ new Set(["Array", "ReadonlyArray", "Record", "Partial", "Readonly", "Date"]);
 var portable = (text) => {
   const stripped = text.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, '""').replace(/[\w$]+\s*\??:/g, ":");
@@ -425,9 +433,10 @@ var brandOf = (ts, checker, type) => {
     const bt = checker.getNonNullableType(checker.getTypeOfSymbol(brand));
     const ctx = checker.getPropertyOfType(bt, "context");
     const val = checker.getPropertyOfType(bt, "type");
-    const ctxType = ctx && checker.getTypeOfSymbol(ctx);
-    if (!ctxType?.isStringLiteral() || !isContext(ctxType.value) || !val) continue;
-    return { context: ctxType.value, expected: checker.typeToString(checker.getTypeOfSymbol(val), void 0, ts.TypeFormatFlags.NoTruncation) };
+    const nameSym = ctx && checker.getPropertyOfType(checker.getTypeOfSymbol(ctx), "name");
+    const nameType = nameSym && checker.getTypeOfSymbol(nameSym);
+    if (!nameType?.isStringLiteral() || !isContext(nameType.value) || !val) continue;
+    return { context: nameType.value, expected: checker.typeToString(checker.getTypeOfSymbol(val), void 0, ts.TypeFormatFlags.NoTruncation) };
   }
   return void 0;
 };

@@ -2,7 +2,7 @@
 // expr(text, runtime) and resolve(expression, data) analyse against whatever the
 // argument is typed as.
 import type TS from 'typescript';
-import { EXPRESSION_CONTEXTS, type ExpressionContext, type RuntimeShape } from './globals.ts';
+import { isContextName, type ExpressionContext, type RuntimeShape } from './globals.ts';
 
 export const shapeFromType = (
 	ts: typeof TS,
@@ -47,9 +47,7 @@ export const shapeFromType = (
 
 	const contextType = prop(type, 'context');
 	const contextValue = contextType?.isStringLiteral() ? contextType.value : undefined;
-	const context = (EXPRESSION_CONTEXTS as readonly string[]).includes(contextValue ?? '')
-		? (contextValue as ExpressionContext)
-		: fallbackContext;
+	const context = isContextName(contextValue) ? contextValue : fallbackContext;
 
 	const input = prop(type, 'input');
 	const nodesType = prop(type, 'nodes');

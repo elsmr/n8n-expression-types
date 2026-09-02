@@ -5,7 +5,7 @@
 // expr() never carries data; resolve() and Resolve<> are where data enters.
 // Each hit carries the context, the shape to analyse against, and where to report.
 import type TS from 'typescript';
-import { EXPRESSION_CONTEXTS, emptyShape, type ExpressionContext, type RuntimeShape } from './globals.ts';
+import { emptyShape, isContextName, type ExpressionContext, type RuntimeShape } from './globals.ts';
 import { shapeFromType } from './shape-from-type.ts';
 import { enclosingParameters, enclosingValue } from './static-shape.ts';
 import type { Analysis, ExpressionService } from './service.ts';
@@ -27,8 +27,7 @@ export type Found = {
 	dataText?: string;
 };
 
-const isContext = (s: string | undefined): s is ExpressionContext =>
-	(EXPRESSION_CONTEXTS as readonly string[]).includes(s ?? '');
+const isContext = isContextName;
 
 // Type text that only uses names every project resolves: primitives, literals, unions,
 // arrays, objects, and a few built-in generics. Anything else is not portable.
@@ -51,9 +50,11 @@ const brandOf = (ts: typeof TS, checker: TS.TypeChecker, type: TS.Type | undefin
 		const bt = checker.getNonNullableType(checker.getTypeOfSymbol(brand));
 		const ctx = checker.getPropertyOfType(bt, 'context');
 		const val = checker.getPropertyOfType(bt, 'type');
-		const ctxType = ctx && checker.getTypeOfSymbol(ctx);
-		if (!ctxType?.isStringLiteral() || !isContext(ctxType.value) || !val) continue;
-		return { context: ctxType.value, expected: checker.typeToString(checker.getTypeOfSymbol(val), undefined, ts.TypeFormatFlags.NoTruncation) };
+		// context is a ContextDefinition interface; its `name` literal is the identifier.
+		const nameSym = ctx && checker.getPropertyOfType(checker.getTypeOfSymbol(ctx), 'name');
+		const nameType = nameSym && checker.getTypeOfSymbol(nameSym);
+		if (!nameType?.isStringLiteral() || !isContext(nameType.value) || !val) continue;
+		return { context: nameType.value, expected: checker.typeToString(checker.getTypeOfSymbol(val), undefined, ts.TypeFormatFlags.NoTruncation) };
 	}
 	return undefined;
 };

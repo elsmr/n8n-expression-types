@@ -30,7 +30,7 @@ Every expression is marked explicitly. There is no default and no bare-string sc
 **Branded slot.** The interface says a field is an expression and in which context, once:
 
 ```ts
-interface INodeTypeDescription { subtitle?: Expression<string, 'description'>; ... }
+interface INodeTypeDescription { subtitle?: Expression<string, DescriptionContext>; ... }
 const description: INodeTypeDescription = { subtitle: '={{ $parameter.operation }}' };
 //                                                     ^ checked; $parameter derived from `properties`
 ```
@@ -38,9 +38,9 @@ const description: INodeTypeDescription = { subtitle: '={{ $parameter.operation 
 **Call.** Where no slot exists, `expr()` names the context. It never carries data:
 
 ```ts
-const paged = expr.httpPagination('={{ $response.body.next }}');   // Expr<"httpPagination", "...">
-const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');  // Expr<"nodeParameter", "...">
-const bad   = expr('={{ $pageCount }}');                            // InvalidExpr<"nodeParameter", "...">
+const paged = expr.httpPagination('={{ $response.body.next }}');   // Expr<HttpPaginationContext, "...">
+const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');  // Expr<NodeParameterContext, "...">
+const bad   = expr('={{ $pageCount }}');                            // InvalidExpr<NodeParameterContext, "...">
 ```
 
 `Expr` and `InvalidExpr` show the declaration; the result type is derived inside and
@@ -55,6 +55,10 @@ is never resolved keeps its loose definition-time type. The plugin writes
 `<project>/n8n-resolved.d.ts`; `pnpm gen-resolved` does the same for CI.
 
 ## Contexts
+
+A context is an interface registered on the global `N8nExpressionContexts` plus a
+`defineContext({ name, layers })` call; both live in `globals.ts` for the built-ins.
+The `name` is the only string, and it is internal: the lookup key derives from it.
 
 | Context | Layers | Extra globals |
 | --- | --- | --- |

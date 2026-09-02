@@ -36,7 +36,7 @@ type Vars<K> = K extends readonly (infer S extends string)[]
 		: Record<S, string>
 	: Record<string, string>;
 
-export type ExpressionContext<R extends RuntimeTypes> = {
+export type LambdaContext<R extends RuntimeTypes> = {
 	$json: Widen<InputOf<R>['json']>;
 	/** @deprecated use $json */
 	$data: Widen<InputOf<R>['json']>;
@@ -106,7 +106,7 @@ export type Expression<T> = string & { readonly __n8nType?: T };
  * expression body, so the body is already valid n8n expression syntax.
  */
 export const expression = <const R extends RuntimeTypes, T>(
-	fn: (ctx: ExpressionContext<R>) => T,
+	fn: (ctx: LambdaContext<R>) => T,
 	_runtime: R,
 ): Expression<T> => {
 	const source = fn.toString();

@@ -2,7 +2,7 @@
 // Reads the dist source statically; exits 1 when n8n has a key we do not declare.
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { EXPRESSION_CONTEXTS, declaredNames } from './globals.ts';
+import { contextNames, declaredNames } from './globals.ts';
 
 const require = createRequire(import.meta.url);
 const dist = require.resolve('n8n-workflow/dist/cjs/workflow-data-proxy.js');
@@ -13,7 +13,7 @@ const end = interfaces.indexOf('\nexport ', start);
 const additional = [...interfaces.slice(start, end).matchAll(/^\s+(\$\w+)\??:/gm)].map((m) => m[1]);
 
 const n8n = new Set([...proxyKeys, ...additional]);
-const ours = new Set(EXPRESSION_CONTEXTS.flatMap(declaredNames));
+const ours = new Set(contextNames().flatMap(declaredNames));
 // Declared by extensions.d.ts, not the layers.
 for (const k of ['$if', '$ifEmpty', '$min', '$max', '$average', '$not']) ours.add(k);
 

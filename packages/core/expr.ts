@@ -12,7 +12,15 @@
 // from what the surrounding code declares, with runtime holes loose. Until generated the
 // type is `any`. At runtime expr() returns its argument; resolve() is n8n's job.
 
-import { EXPRESSION_CONTEXTS, type ExpressionContext, type RuntimeTypes } from './globals.ts';
+import {
+	contextNames,
+	type ContextByName,
+	type ContextName,
+	type ContextType,
+	type ExpressionContext,
+	type NodeParameterContext,
+	type RuntimeTypes,
+} from './globals.ts';
 
 declare global {
 	/**
@@ -27,12 +35,12 @@ type Entry = { loose: unknown; strict: unknown[] };
 type Brand<T, C, E> = { readonly __n8n?: { type: T; context: C; text: E } };
 
 /** Slot declaration: a string that must be an expression yielding T in context C. */
-export type Expression<T = unknown, C extends ExpressionContext = 'nodeParameter'> = string & Brand<T, C, string>;
+export type Expression<T = unknown, C extends ContextType = NodeParameterContext> = string & Brand<T, C, string>;
 
-export type ResolvedKey<C extends string, E extends string> = `${C}::${E}`;
+export type ResolvedKey<C extends ContextType, E extends string> = `${ContextName<C>}::${E}`;
 export const resolvedKey = (context: string, expression: string) => `${context}::${expression}`;
 
-type EntryOf<C extends ExpressionContext, E extends string> =
+type EntryOf<C extends ContextType, E extends string> =
 	ResolvedKey<C, E> extends keyof N8nResolvedTypes
 		? N8nResolvedTypes[ResolvedKey<C, E>] extends Entry
 			? N8nResolvedTypes[ResolvedKey<C, E>]
@@ -42,14 +50,14 @@ type EntryOf<C extends ExpressionContext, E extends string> =
 type IsAny<T> = 0 extends 1 & T ? true : false;
 
 /** Definition-time type: what the text yields with runtime holes loose. `any` until generated. */
-export type Resolved<C extends ExpressionContext, E extends string> = [EntryOf<C, E>] extends [never] ? any : EntryOf<C, E>['loose'];
+export type Resolved<C extends ContextType, E extends string> = [EntryOf<C, E>] extends [never] ? any : EntryOf<C, E>['loose'];
 
 /** What expr() returns: the text E declared as an expression in context C. Its type is derived, not shown. */
-export type Expr<C extends ExpressionContext, E extends string> = string & Brand<Resolved<C, E>, C, E>;
+export type Expr<C extends ContextType, E extends string> = string & Brand<Resolved<C, E>, C, E>;
 /** Same, when the text is wrong in its context. The plugin or gen-resolved says why. */
-export type InvalidExpr<C extends ExpressionContext, E extends string> = string & Brand<N8nInvalidExpression, C, E>;
+export type InvalidExpr<C extends ContextType, E extends string> = string & Brand<N8nInvalidExpression, C, E>;
 
-type ExprResult<C extends ExpressionContext, E extends string> =
+type ExprResult<C extends ContextType, E extends string> =
 	IsAny<Resolved<C, E>> extends true
 		? Expr<C, E>
 		: Resolved<C, E> extends N8nInvalidExpression
@@ -65,28 +73,30 @@ type Match<Pairs, D> = Pairs extends [[infer K, infer T], ...infer Rest]
 		: Match<Rest, D>
 	: never;
 
-type ExprFn<C extends ExpressionContext> = <const E extends string>(expression: E) => ExprResult<C, E>;
+type ExprFn<C extends ContextType> = <const E extends string>(expression: E) => ExprResult<C, E>;
 
 const make =
-	<C extends ExpressionContext>(_context: C): ExprFn<C> =>
+	<C extends ContextType>(_name: ContextName<C>): ExprFn<C> =>
 	(expression) =>
 		expression as ExprResult<C, typeof expression>;
 
-export const expr: ExprFn<'nodeParameter'> & { readonly [C in ExpressionContext]: ExprFn<C> } = Object.assign(
-	make('nodeParameter'),
-	Object.fromEntries(EXPRESSION_CONTEXTS.map((c) => [c, make(c)])) as { [C in ExpressionContext]: ExprFn<C> },
+type ExprByContext = { readonly [N in ExpressionContext]: ExprFn<ContextByName<N>> };
+
+export const expr: ExprFn<NodeParameterContext> & ExprByContext = Object.assign(
+	make<NodeParameterContext>('nodeParameter'),
+	Object.fromEntries(contextNames().map((n) => [n, make(n)])) as ExprByContext,
 );
 
 type AnyExpr = string & Brand<any, any, any>;
-export type DataFor<C extends ExpressionContext> = Omit<RuntimeTypes, 'context'> & { context?: C };
-export type ContextOf<X> = X extends Brand<any, infer C, any> ? C : never;
+export type DataFor<C extends ContextType> = Omit<RuntimeTypes, 'context'> & { context?: ContextName<C> };
+export type ContextOf<X> = X extends Brand<any, infer C extends ContextType, any> ? C : never;
 
 /**
  * The type `X` yields against data `D`, from the generator's record of this exact pairing.
  * Unknown pairing (not generated yet, or D is not portable) falls back to the loose type.
  */
 export type Resolve<X extends AnyExpr, D> =
-	X extends Brand<infer T, infer C extends ExpressionContext, infer E extends string>
+	X extends Brand<infer T, infer C extends ContextType, infer E extends string>
 		? [Match<EntryOf<C, E>['strict'], D>] extends [never]
 			? T
 			: Match<EntryOf<C, E>['strict'], D>

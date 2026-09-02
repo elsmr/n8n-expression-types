@@ -9,8 +9,36 @@
 
 export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
-export const EXPRESSION_CONTEXTS = ['nodeParameter', 'httpPagination', 'routing', 'description', 'credential'] as const;
-export type ExpressionContext = (typeof EXPRESSION_CONTEXTS)[number];
+// ---------- context registry ----------
+//
+// A context is a named set of layers. Type side: an interface registered on the global
+// `N8nExpressionContexts`, so `Expr<NodeParameterContext, ...>` reads as a name and the
+// lookup key is derived from `name`. Runtime side: `defineContext()` registers the same
+// name with its layers for the tooling. Adding a context is one file doing both.
+
+export interface ContextDefinition<Name extends string = string> {
+	readonly name: Name;
+	readonly layers: readonly LayerName[];
+}
+
+declare global {
+	interface N8nExpressionContexts {}
+}
+
+export type ContextType = N8nExpressionContexts[keyof N8nExpressionContexts];
+export type ExpressionContext = keyof N8nExpressionContexts & string;
+export type ContextName<C> = C extends { readonly name: infer N extends string } ? N : never;
+export type ContextByName<N extends ExpressionContext> = N8nExpressionContexts[N];
+
+const registry = new Map<string, ContextDefinition>();
+
+export const defineContext = <C extends ContextDefinition>(definition: C): C => {
+	registry.set(definition.name, definition);
+	return definition;
+};
+
+export const contextNames = (): ExpressionContext[] => [...registry.keys()] as ExpressionContext[];
+export const isContextName = (s: string | undefined): s is ExpressionContext => registry.has(s ?? '');
 
 export type NodeRuntime = {
 	json: Json;
@@ -202,17 +230,41 @@ const credential: Layer = (s) => `
 export const LAYERS = { core, item, description, routing, pagination, credential };
 export type LayerName = keyof typeof LAYERS;
 
-export const PROFILES: Record<ExpressionContext, LayerName[]> = {
-	nodeParameter: ['core', 'item'],
-	httpPagination: ['core', 'item', 'pagination'],
-	routing: ['core', 'item', 'routing'],
-	description: ['core', 'description'],
-	credential: ['core', 'credential'],
+export const buildGlobals = (s: RuntimeShape): string => {
+	const definition = registry.get(s.context);
+	if (!definition) throw new Error(`Unknown expression context "${s.context}"`);
+	return `\ndeclare global {${definition.layers.map((l) => LAYERS[l](s)).join('\n')}\n}\nexport {};\n`;
 };
-
-export const buildGlobals = (s: RuntimeShape): string =>
-	`\ndeclare global {${PROFILES[s.context].map((l) => LAYERS[l](s)).join('\n')}\n}\nexport {};\n`;
 
 /** Names declared by a context, for the drift check. */
 export const declaredNames = (context: ExpressionContext): string[] =>
 	[...buildGlobals(emptyShape(context)).matchAll(/(?:const|function) (\$\w*)/g)].map((m) => m[1]);
+
+// ---------- built-in contexts ----------
+
+export interface NodeParameterContext extends ContextDefinition<'nodeParameter'> {}
+export interface HttpPaginationContext extends ContextDefinition<'httpPagination'> {}
+export interface RoutingContext extends ContextDefinition<'routing'> {}
+export interface DescriptionContext extends ContextDefinition<'description'> {}
+export interface CredentialContext extends ContextDefinition<'credential'> {}
+
+declare global {
+	interface N8nExpressionContexts {
+		nodeParameter: NodeParameterContext;
+		httpPagination: HttpPaginationContext;
+		routing: RoutingContext;
+		description: DescriptionContext;
+		credential: CredentialContext;
+	}
+}
+
+/** Node parameter values: runs per item with $json, $input, $('Node'), ... */
+export const nodeParameterContext = defineContext<NodeParameterContext>({ name: 'nodeParameter', layers: ['core', 'item'] });
+/** HTTP Request pagination options: adds $request, $response, $version, $pageCount. */
+export const httpPaginationContext = defineContext<HttpPaginationContext>({ name: 'httpPagination', layers: ['core', 'item', 'pagination'] });
+/** Declarative node routing: adds $credentials, $value, $response, $responseItem, $request, $self. */
+export const routingContext = defineContext<RoutingContext>({ name: 'routing', layers: ['core', 'item', 'routing'] });
+/** Node description fields (subtitle, outputs): $parameter, no item data. */
+export const descriptionContext = defineContext<DescriptionContext>({ name: 'description', layers: ['core', 'description'] });
+/** Credential fields: $self, $secrets, $vars. */
+export const credentialContext = defineContext<CredentialContext>({ name: 'credential', layers: ['core', 'credential'] });

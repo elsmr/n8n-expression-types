@@ -1,7 +1,7 @@
 // Branded slots: the interface says which fields are expressions and in which context.
 // Nothing marks the literals themselves. This mimics what INodeTypeDescription in
 // n8n-workflow would declare; the plugin reads the contextual type.
-import type { Expression } from 'n8n-expression-types';
+import type { Expression, DescriptionContext, NodeParameterContext, RoutingContext } from 'n8n-expression-types';
 
 type NodeParameterValue = string | number | boolean | null;
 type ParameterType = 'string' | 'number' | 'boolean' | 'options' | 'collection' | 'fixedCollection' | 'multiOptions';
@@ -10,19 +10,19 @@ interface INodeProperties {
 	displayName: string;
 	name: string;
 	type: ParameterType;
-	default: NodeParameterValue | Expression<NodeParameterValue, 'nodeParameter'>;
+	default: NodeParameterValue | Expression<NodeParameterValue, NodeParameterContext>;
 	options?: Array<{ name: string; value: NodeParameterValue } | { name: string; values: INodeProperties[] } | INodeProperties>;
 	typeOptions?: { multipleValues?: boolean };
 	routing?: {
-		request?: { url?: Expression<string, 'routing'>; qs?: Record<string, Expression<string | number, 'routing'>> };
+		request?: { url?: Expression<string, RoutingContext>; qs?: Record<string, Expression<string | number, RoutingContext>> };
 	};
 }
 
 interface INodeTypeDescription {
 	displayName: string;
-	subtitle?: Expression<string, 'description'>;
-	outputs: string[] | Expression<string[], 'description'>;
-	maxItems?: number | Expression<number, 'description'>;
+	subtitle?: Expression<string, DescriptionContext>;
+	outputs: string[] | Expression<string[], DescriptionContext>;
+	maxItems?: number | Expression<number, DescriptionContext>;
 	properties: INodeProperties[];
 }
 
