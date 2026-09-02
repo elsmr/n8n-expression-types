@@ -100,8 +100,8 @@ export type LambdaContext<R extends RuntimeTypes> = {
 	$fromai: (name: string, description?: string, type?: N8nFromAIType, defaultValue?: unknown) => any;
 };
 
-/** An n8n expression string that remembers the type it evaluates to. */
-export type Expression<T> = string & { readonly __n8nType?: T };
+/** An n8n expression string produced from a lambda, remembering the type it evaluates to. */
+export type LambdaExpression<T> = string & { readonly __n8nType?: T };
 
 /**
  * Types the lambda against `runtime` and serialises it to an `={{ }}` string.
@@ -111,7 +111,7 @@ export type Expression<T> = string & { readonly __n8nType?: T };
 export const expression = <const R extends RuntimeTypes, T>(
 	fn: (ctx: LambdaContext<R>) => T,
 	_runtime: R,
-): Expression<T> => {
+): LambdaExpression<T> => {
 	const source = fn.toString();
 	const arrow = source.indexOf('=>');
 	const params = source.slice(0, arrow).trim();

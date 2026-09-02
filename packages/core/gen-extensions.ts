@@ -2,6 +2,9 @@
 // augmentations, read from n8n-workflow's doc metadata. Re-run after bumping n8n-workflow.
 import { writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import type { ExpressionExtensions as ExpressionExtensionsType } from 'n8n-workflow';
 
 // n8n-workflow's ESM build trips on a named import from @n8n/tournament; use the CJS build.
@@ -81,10 +84,15 @@ const signature = (method: string, doc: Doc | undefined, self: string): string =
 	return `${method}(${args}): ${returnType};`;
 };
 
+// n8n dispatches these at runtime, but as declarations they would collide with an existing
+// property: Array#length from lib, DateTime#isWeekend from @types/luxon (a getter, not a method).
+const COLLIDES: Record<string, string[]> = { Array: ['length'], Date: ['isWeekend'] };
+
 const members = (typeName: string): string => {
 	const map = ExpressionExtensions.find((m) => m.typeName === typeName);
 	if (!map) return '';
 	return Object.entries(map.functions)
+		.filter(([name]) => !COLLIDES[typeName]?.includes(name))
 		.map(([name, fn]) => {
 			const doc = (fn as { doc?: Doc }).doc;
 			return `${jsdoc(name, doc, '\t\t')}\t\t${signature(name, doc, typeName)}`;
@@ -145,5 +153,25 @@ ${functions.join('\n')}
 export {};
 `;
 
-writeFileSync(new URL('./extensions.d.ts', import.meta.url), out);
+const outPath = new URL('./extensions.d.ts', import.meta.url);
+writeFileSync(outPath, out);
 console.log('wrote extensions.d.ts');
+
+// skipLibCheck hides duplicate-identifier clashes with lib or @types/luxon; check them here.
+const dir = path.dirname(fileURLToPath(outPath));
+const program = ts.createProgram([path.join(dir, 'extensions.d.ts'), path.join(dir, 'shapes.d.ts')], {
+	strict: true,
+	target: ts.ScriptTarget.ESNext,
+	lib: ['lib.es2023.d.ts'],
+	module: ts.ModuleKind.ESNext,
+	moduleResolution: ts.ModuleResolutionKind.Bundler,
+	types: [],
+	noEmit: true,
+	skipLibCheck: false,
+});
+const clashes = ts.getPreEmitDiagnostics(program).filter((d) => d.code === 2300);
+for (const d of clashes) {
+	const { line } = d.file!.getLineAndCharacterOfPosition(d.start!);
+	console.error(`${path.relative(process.cwd(), d.file!.fileName)}:${line + 1}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+}
+if (clashes.length) process.exit(1);

@@ -46,11 +46,6 @@ dt.isBetween('2020', '2025') // true
 		 */
 		isInLast(n: number, unit?: DurationUnit): boolean;
 		/**
-		 * Checks if the Date falls on a Saturday or Sunday.
-		 * @see https://docs.n8n.io/code/builtin/data-transformation-functions/dates/#date-isWeekend
-		 */
-		isWeekend(): boolean;
-		/**
 		 * Subtracts a given period of time from the DateTime
 		 * @param n The number of units to subtract. Or use a Luxon <a target="_blank" href=”https://moment.github.io/luxon/api-docs/index.html#duration”>Duration</a> object to subtract multiple units at once.
 		 * @param unit The units of the number. One of: <code>years</code>, <code>months</code>, <code>weeks</code>, <code>days</code>, <code>hours</code>, <code>minutes</code>, <code>seconds</code>, <code>milliseconds</code>
@@ -717,11 +712,6 @@ dt.isBetween('2020', '2025') // true
 		 * @see https://docs.n8n.io/code/builtin/data-transformation-functions/dates/#date-isInLast
 		 */
 		isInLast(n: number, unit?: DurationUnit): boolean;
-		/**
-		 * Checks if the Date falls on a Saturday or Sunday.
-		 * @see https://docs.n8n.io/code/builtin/data-transformation-functions/dates/#date-isWeekend
-		 */
-		isWeekend(): boolean;
 		/**
 		 * Subtracts a given period of time from the DateTime
 		 * @param n The number of units to subtract. Or use a Luxon <a target="_blank" href=”https://moment.github.io/luxon/api-docs/index.html#duration”>Duration</a> object to subtract multiple units at once.
