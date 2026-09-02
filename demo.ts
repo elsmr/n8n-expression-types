@@ -1,20 +1,25 @@
-import { analyze, completionsAt, globalsFor } from './service.ts';
+import ts from 'typescript';
+import { createExpressionService } from './service.ts';
 import { runtime } from './example-runtime.ts';
+import { shapeFromValues } from './globals.ts';
 
+const shape = shapeFromValues(runtime);
 
+const { analyze, completionsAt, globalsFor } = createExpressionService({ ts, root: import.meta.dirname });
 
 const show = (expression: string) => {
-	const a = analyze(expression, runtime);
+	const a = analyze(expression, shape);
 	console.log(`\n${expression}\n  => ${a.type}`);
 	for (const b of a.blocks) {
-		console.log(`  {{${b.body}}} : ${b.type}${b.errors.length ? `\n    ! ${b.errors.join('\n    ! ')}` : ''}`);
+		const errors = b.errors.map((e) => `\n    ! ${e.message}`).join('');
+		console.log(`  {{${b.body}}} : ${b.type}${errors}`);
 	}
 };
 
 const complete = (expression: string, marker = '|') => {
 	const offset = expression.indexOf(marker);
 	const expr = expression.replace(marker, '');
-	const names = completionsAt(expr, offset, runtime);
+	const names = completionsAt(expr, offset, shape).map((e) => e.name);
 	console.log(`\n${expression}\n  -> ${names.slice(0, 14).join(', ')}${names.length > 14 ? ', ...' : ''}`);
 };
 
@@ -30,7 +35,7 @@ show('={{ $parameter.options.timeout }}');
 show('={{ $vars.apiKey }}');
 show('={{ $vars.nope }}');
 
-console.log('\n--- extension methods (from n8n-workflow doc metadata) ---');
+console.log('\n--- extension methods (extensions.d.ts) ---');
 show('={{ $json.test.toTitleCase().toSnakeCase() }}');
 show('={{ $json.tags.randomItem() }}');
 show('={{ $json.n.round(1).toBoolean() }}');
@@ -53,4 +58,4 @@ complete('={{ $vars.| }}');
 complete('={{ $now.| }}');
 complete('={{ $| }}');
 
-if (process.argv.includes('--globals')) console.log(globalsFor(runtime));
+if (process.argv.includes('--globals')) console.log(globalsFor(shape));

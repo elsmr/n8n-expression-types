@@ -11,9 +11,6 @@ importers:
       luxon:
         specifier: ^3.7.2
         version: 3.7.2
-      n8n-workflow:
-        specifier: ^2.16.0
-        version: 2.16.0
     devDependencies:
       '@types/luxon':
         specifier: ^3.7.5
@@ -21,6 +18,15 @@ importers:
       '@types/node':
         specifier: ^26.4.0
         version: 26.4.0
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      n8n-expression-ts-plugin:
+        specifier: link:plugin
+        version: link:plugin
+      n8n-workflow:
+        specifier: ^2.16.0
+        version: 2.16.0
       tsx:
         specifier: ^4.23.13
         version: 4.23.13

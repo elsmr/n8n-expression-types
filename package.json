@@ -4,17 +4,22 @@
   "type": "module",
   "scripts": {
     "demo": "tsx demo.ts",
-    "typecheck": "tsc --noEmit",
-    "playground": "tsx gen-playground.ts"
+    "typecheck": "tsc --noEmit && tsc -p playground",
+    "gen-extensions": "tsx gen-extensions.ts",
+    "gen-resolved": "tsx gen-resolved.ts playground/tsconfig.json",
+    "build:plugin": "pnpm --dir plugin build",
+    "smoke": "pnpm build:plugin && tsx plugin/smoke.ts"
   },
   "devDependencies": {
     "@types/luxon": "^3.7.5",
     "@types/node": "^26.4.0",
+    "esbuild": "^0.28.2",
+    "n8n-workflow": "^2.16.0",
     "tsx": "^4.23.13",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "n8n-expression-ts-plugin": "link:plugin"
   },
   "dependencies": {
-    "luxon": "^3.7.2",
-    "n8n-workflow": "^2.16.0"
+    "luxon": "^3.7.2"
   }
 }

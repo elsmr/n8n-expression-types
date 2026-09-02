@@ -2,3 +2,5 @@ onlyBuiltDependencies:
   - esbuild
 ignoredBuiltDependencies:
   - isolated-vm
+allowBuilds:
+  isolated-vm: set this to true or false

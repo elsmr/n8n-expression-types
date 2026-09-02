@@ -1,0 +1,10 @@
+{
+  "name": "n8n-expression-ts-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "main": "entry.cjs",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --external:typescript --outfile=dist/index.cjs --log-level=warning"
+  },
+  "type": "module"
+}

@@ -1,4 +1,6 @@
-import type { RuntimeTypes } from './globals.ts';
+// Sample data the expressions are typed against. `as const` keeps node names and
+// variable names literal; json values are widened by the tooling.
+import type { RuntimeTypes } from '../globals.ts';
 
 export const runtime = {
 	input: {
@@ -6,10 +8,7 @@ export const runtime = {
 		binaryKeys: ['data'],
 	},
 	nodes: {
-		Webhook: {
-			json: { headers: { host: 'x' }, body: { orderId: 42 } },
-			params: { path: 'orders', httpMethod: 'POST' },
-		},
+		Webhook: { json: { headers: { host: 'x' }, body: { orderId: 42 } }, params: { path: 'orders', httpMethod: 'POST' } },
 		'Edit Fields': { json: { total: 9.5 }, binaryKeys: ['invoice'] },
 	},
 	parameters: { url: 'https://example.com', options: { timeout: 3000 } },

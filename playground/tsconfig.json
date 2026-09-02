@@ -2,12 +2,14 @@
   "compilerOptions": {
     "strict": true,
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
     "noEmit": true,
     "skipLibCheck": true,
     "types": [],
-    "typeRoots": ["../node_modules/@types"]
+    "plugins": [{ "name": "n8n-expression-ts-plugin" }]
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "../shapes.d.ts", "../extensions.d.ts"]
 }
