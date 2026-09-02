@@ -2,29 +2,24 @@
 
 n8n expressions are JavaScript inside strings: `={{ $json.user.email.toLowerCase() }}`.
 Today nothing checks them before they run. This repo types them with TypeScript's own
-checker, so the editor shows errors, hover types, completions and quick fixes inside the
-string, the resulting type flows into surrounding code, and CI can gate on it.
+checker, so the editor shows errors, hover types, completions and quick fixes.
 
 ```ts
 const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');
 //                       ^ hover: (method) Array<number>.sum(): number
 
-resolve(total, sample);                  // number
-resolve(typo, sample);                  // N8nResolveError, and the line is underlined:
+resolve(total, sample); // number
+resolve(typo, sample);  // N8nResolveError (typescript error):
 //   Property 'toUppercase' does not exist on type 'string'. Did you mean 'toUpperCase'?
 ```
 
-## See it
+## Demo
 
 ```sh
 pnpm install
-pnpm open        # VS Code with the extension loaded, on playground/node-description.ts
+pnpm open # Launches VS Code window with the extension loaded
 ```
 
-`playground/README.md` is a five-step tour of what to hover. Other routes: F5 from the
-repo root does the same as `pnpm open`; `pnpm vsix` builds an installable extension for
-any workspace (`code --install-extension n8n-expressions.vsix`); `pnpm test` drives the
-plugin headless and asserts what it shows.
 
 ## What you get
 
@@ -47,7 +42,7 @@ const bad  = expr('={{ $pageCount }}');                           // InvalidExpr
 **`resolve()` and `Resolve<>` are where data enters.** The expression is checked against
 the data's type, and the result type is specific to that pairing. The lookup behind it is
 a hidden file, `.n8n/expressions.d.ts`, written by the plugin while you type and by
-`n8n-expressions generate` before `tsc` in CI. Plain `tsc`, no wrapper, nothing to commit.
+`n8n-expressions typegen` before `tsc`. Plain `tsc`, no wrapper, nothing to commit.
 
 ```ts
 const url: string = resolve(next, paginationSample);
@@ -55,11 +50,19 @@ type Url = Resolve<typeof next, typeof paginationSample>;        // string
 type Bad = Resolve<typeof next, { response: { items: number[] } }>; // N8nResolveError
 ```
 
-**Lambda form.** For expressions authored in TypeScript: no parser, native checking.
+**Lambda form.** `expr()` also takes a lambda over the context. Same contexts and slots,
+checked by TypeScript itself with runtime data loose; serialised to `={{ body }}` with
+`fn.toString()`, so n8n sees an ordinary expression. `resolve()` returns the type the lambda
+yields but cannot re-check the body against data: a body is checked once, where it is written.
 
 ```ts
-expression(({ $json, $ }) => $json.n * $('Webhook').item.json.body.orderId, sample);
+expr(({ $json, $ }) => $json.n * $('Webhook').item.json.body.orderId);  // LambdaExpr<NodeParameterContext, number>
+expr.httpPagination(({ $pageCount }) => $pageCount >= 10);              // LambdaExpr<HttpPaginationContext, boolean>
+expr(({ $pageCount }) => $pageCount);                                   // error: not in this context
 ```
+
+Serialisation reads compiled output, so it needs `target` >= ES2020 (no `?.` downlevelling)
+and no minifier; a closure over a local compiles and breaks at runtime.
 
 **Editor.** Everything TypeScript gives you, forwarded into the string: hover on `$json`
 shows its type, `.toTitleCase` shows n8n's docs and example, `$now.minus(` shows Luxon's
@@ -68,31 +71,23 @@ colours. Works in any tsserver editor via tsconfig, or through the VS Code exten
 
 ## How it works
 
-```mermaid
-flowchart LR
-  src[TS source] --> scan[scan: branded slot / expr() / resolve()]
-  scan --> shape[shape: data type, sibling properties, or loose]
-  shape --> vf[virtual TS file per expression<br/>+ globals for the context<br/>+ extensions.d.ts]
-  vf --> ls[TypeScript language service]
-  ls --> plugin[tsserver plugin: diagnostics, hover, completions, fixes]
-  ls --> gen[n8n-expressions generate: .n8n/expressions.d.ts + expression report; then plain tsc]
-```
+1. **Find.** A scan of the program collects every expression: literals in branded slots,
+   `expr()` arguments, `resolve()` sites. Each comes with its context and whatever shape is
+   known: the data type at a `resolve()`, sibling `properties` for `$parameter`, or nothing.
+2. **Check.** The code inside `{{ }}` is copied into a small TypeScript file that also
+   declares the context's globals and n8n's extension methods. TypeScript checks that file;
+   its errors, hover and completions are mapped back into the string.
+3. **Flow.** TypeScript cannot parse a string at the type level, so result types reach the
+   program through a lookup interface keyed by context and text, written to
+   `.n8n/expressions.d.ts`. The plugin writes it while you type, `typegen` writes it before `tsc`.
+   Absent, resolved types are `any`.
 
-Each `{{ }}` body becomes `const __r0 = (<body>);` in a virtual file next to ambient
-declarations for the context: `$json`, `$input`, `$('Node')`, `$now`, and the n8n
-extension methods. The checker does the rest. TypeScript cannot parse a string at the
-type level, so result types reach the program through a lookup interface keyed by context
-and text, written to `.n8n/expressions.d.ts` in the project. tsc picks it up through one
-`include` glob; when the file is absent, resolved types fall back to `any`, so a fresh
-clone type-checks before anything has run. The plugin adds it as a root file itself, so
-the editor needs no config at all.
-
-Grounded in n8n's code: the globals per context come from `workflow-data-proxy.ts`,
-`get-additional-keys.ts`, `routing-node.ts` and `pagination.ts`; `extensions.d.ts` is
-generated from `n8n-workflow`'s own doc metadata; `pnpm drift` fails when n8n adds a
-global the layers do not declare.
+The globals per context follow `workflow-data-proxy.ts` and its callers; `extensions.d.ts`
+is generated from `n8n-workflow`'s own doc metadata.
 
 ## Contexts
+
+Interfaces over a runtime sample (`NodeParameterContext<R>`), shared by both forms.
 
 | Context | Adds |
 | --- | --- |
@@ -119,32 +114,28 @@ pnpm add @n8n/expression-types && pnpm add -D @n8n/expression-ts-plugin
 ```
 
 Add `.n8n/` to `.gitignore`. Type the slots that hold expressions as `Expression<T, Context>`,
-use `expr()` for loose strings, `resolve()` where data exists. In CI:
+use `expr()` for loose strings, `resolve()` where data exists. Then:
 
 ```sh
-n8n-expressions generate tsconfig.json && tsc
+n8n-expressions typegen && tsc
 ```
 
-`generate` fails on broken expressions and writes the lookup that makes `tsc` exact. Without
+`typegen` fails on broken expressions and writes the lookup that makes `tsc` exact. Without
 it `tsc` still passes; resolved types are `any`.
 
 ## Repo
 
 | Path | What |
 | --- | --- |
-| `packages/core` | `@n8n/expression-types`: service, contexts and globals, `expr`/`resolve`, lambda form, generators, drift check |
-| `packages/plugin` | `@n8n/expression-ts-plugin`: the tsserver plugin |
-| `packages/vscode` | VS Code extension: `{{ }}` highlighting, bundles the plugin |
+| `packages/@n8n/expression-types` | contexts, `expr`/`resolve`; what node code imports |
+| `packages/@n8n/expression-ts-plugin` | the tsserver plugin and the `n8n-expressions typegen` CLI |
+| `packages/vscode-n8n-expressions` | VS Code extension: `{{ }}` highlighting, bundles the plugin |
 | `playground` | The tour and the type tests |
-| `docs/design.md` | Decisions, alternatives rejected, known gaps, cost numbers |
+| `scripts` | `gen-extensions`, the only code that reads `n8n-workflow` |
 
 ```sh
 pnpm test         # plugin behaviour, headless and against a real tsserver
-pnpm typecheck    # build, generate, then plain tsc on plugin and playground
-pnpm generate     # n8n-expressions generate on the playground: lookup + expression report
+pnpm typecheck    # build, typegen, then plain tsc on plugin and playground
+pnpm typegen      # n8n-expressions typegen on the playground: lookup + expression report
 pnpm dev          # rebuild core and plugin on change
-pnpm drift        # n8n-workflow globals vs declared layers
 ```
-
-TypeScript is pinned to 6.x: `typescript@7` is the Go compiler and has no language
-service API or plugin model yet. Packages are private.

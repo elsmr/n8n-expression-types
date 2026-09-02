@@ -1,7 +1,7 @@
 {
 	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
 	"vcs": { "clientKind": "git", "enabled": true, "useIgnoreFile": true },
-	"files": { "ignore": ["**/package.json", "packages/core/extensions.d.ts"] },
+	"files": { "ignore": ["**/package.json", "packages/@n8n/expression-types/src/extensions.d.ts"] },
 	"formatter": { "indentStyle": "tab", "indentWidth": 2, "lineEnding": "lf", "lineWidth": 100 },
 	"organizeImports": { "enabled": false },
 	"linter": { "enabled": false },

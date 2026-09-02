@@ -3,16 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "bin": {
-    "n8n-expressions": "./dist/cli.js"
-  },
   "exports": {
     ".": "./dist/index.js",
-    "./context": "./dist/context.js",
-    "./service": "./dist/service.js",
-    "./scan": "./dist/scan.js",
-    "./globals": "./dist/globals.js",
-    "./lookup-file": "./dist/lookup-file.js",
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -22,8 +14,5 @@
   "dependencies": {
     "@types/luxon": "^3.7.5",
     "luxon": "^3.7.2"
-  },
-  "devDependencies": {
-    "n8n-workflow": "^2.16.0"
   }
 }

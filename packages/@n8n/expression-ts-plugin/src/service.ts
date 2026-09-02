@@ -1,16 +1,23 @@
 // Types, diagnostics and completions for n8n expressions with arbitrary JS inside {{ }}.
 // Drives a TypeScript language service over a virtual file: each block body becomes
-// `const __rN = (<body>);` next to the generated globals and extensions.d.ts.
+// `const __rN = (<body>);` next to the context's members declared as globals, and
+// extensions.d.ts.
 //
 // `ts` is injected so the same code runs inside tsserver (a plugin must use the
 // instance it is handed) and in a standalone script.
 
 import type TS from 'typescript';
-import { buildGlobals, type Json, type RuntimeShape, type RuntimeTypes } from './globals.ts';
+import {
+	renderShape,
+	type ExpressionContext,
+	type Json,
+	type RuntimeShape,
+	type RuntimeTypes,
+} from '@n8n/expression-types';
 
 export type Options = {
 	ts: typeof TS;
-	/** Directory holding shapes.d.ts and extensions.d.ts, with luxon resolvable from it. */
+	/** The @n8n/expression-types package directory: src/*.d.ts, dist/, luxon. */
 	root: string;
 };
 
@@ -74,7 +81,11 @@ export const compile = (expression: string) => {
 export const createExpressionService = ({ ts, root }: Options) => {
 	const GLOBALS_FILE = `${root}/__expr__/globals.d.ts`;
 	const EXPR_FILE = `${root}/__expr__/expr.ts`;
-	const LIB_FILES = [`${root}/shapes.d.ts`, `${root}/extensions.d.ts`];
+	const LIB_FILES = [
+		`${root}/src/shapes.d.ts`,
+		`${root}/src/extensions.d.ts`,
+		`${root}/dist/contexts.d.ts`,
+	];
 
 	const files = new Map<string, string>();
 	const versions = new Map<string, number>();
@@ -115,9 +126,41 @@ export const createExpressionService = ({ ts, root }: Options) => {
 
 	const service = ts.createLanguageService(host, ts.createDocumentRegistry());
 
+	const contextType = (context: ExpressionContext, shape?: RuntimeShape) =>
+		`N8nExpressionContexts<${shape ? renderShape(shape) : '{}'}>[${JSON.stringify(context)}]`;
+
+	// The interface's members, with docs, read once per context through the checker: the
+	// list of names is what `declare const` needs and the type system cannot hand over.
+	const members = new Map<ExpressionContext, Array<{ name: string; doc: string }>>();
+	const membersOf = (context: ExpressionContext) => {
+		const hit = members.get(context);
+		if (hit) return hit;
+		set(GLOBALS_FILE, `declare const __probe: ${contextType(context)};\nexport {};\n`);
+		const program = service.getProgram()!;
+		const checker = program.getTypeChecker();
+		const probe = program.getSourceFile(GLOBALS_FILE)!.statements[0] as TS.VariableStatement;
+		const type = checker.getTypeAtLocation(probe.declarationList.declarations[0].name);
+		const list = checker.getPropertiesOfType(type).map((p) => {
+			const lines = [
+				ts.displayPartsToString(p.getDocumentationComment(checker)),
+				...p.getJsDocTags(checker).map((t) => `@${t.name} ${ts.displayPartsToString(t.text)}`),
+			].filter(Boolean);
+			return { name: p.name, doc: lines.length ? `/** ${lines.join('\n')} */\n` : '' };
+		});
+		members.set(context, list);
+		return list;
+	};
+
+	const globals = (shape: RuntimeShape) => {
+		const decls = membersOf(shape.context)
+			.map((m) => `${m.doc}const ${m.name}: __G[${JSON.stringify(m.name)}];`)
+			.join('\n');
+		return `type __G = ${contextType(shape.context, shape)};\ndeclare global {\n${decls}\n}\nexport {};\n`;
+	};
+
 	// `expected` adds a final assignment so the checker reports slot mismatches.
 	const load = (expression: string, shape: RuntimeShape, expected?: string) => {
-		set(GLOBALS_FILE, buildGlobals(shape));
+		set(GLOBALS_FILE, globals(shape));
 		const compiled = compile(expression);
 		const single = !compiled.hasText && compiled.blocks.length === 1;
 		const check = expected
@@ -210,22 +253,6 @@ export const createExpressionService = ({ ts, root }: Options) => {
 		return { type, blocks: typed, ...(slotError ? { slotError } : {}) };
 	};
 
-	/** `offset` is a cursor position inside `expression`. */
-	const completionsAt = (
-		expression: string,
-		offset: number,
-		shape: RuntimeShape,
-	): TS.CompletionEntry[] => {
-		const { blocks } = load(expression, shape);
-		const block = blocks.find((b) => offset >= b.start && offset <= b.end);
-		if (!block) return [];
-		const pos = block.fileStart + (offset - block.start);
-		const result = service.getCompletionsAtPosition(EXPR_FILE, pos, {});
-		return (result?.entries ?? []).filter(
-			(e) => e.kind !== ts.ScriptElementKind.warning && e.kind !== ts.ScriptElementKind.keyword,
-		);
-	};
-
 	/**
 	 * Loads the expression and exposes the inner language service with position mapping,
 	 * so callers can forward quick info, signature help or completion details for a token.
@@ -255,7 +282,7 @@ export const createExpressionService = ({ ts, root }: Options) => {
 		};
 	};
 
-	return { analyze, completionsAt, virtual };
+	return { analyze, virtual };
 };
 
 export type ExpressionService = ReturnType<typeof createExpressionService>;

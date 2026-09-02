@@ -17,6 +17,9 @@ importers:
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
+      n8n-workflow:
+        specifier: ^2.16.0
+        version: 2.16.0
       tsx:
         specifier: ^4.23.13
         version: 4.23.13
@@ -24,7 +27,16 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
-  packages/core:
+  packages/@n8n/expression-ts-plugin:
+    dependencies:
+      '@n8n/expression-types':
+        specifier: workspace:*
+        version: link:../expression-types
+      typescript:
+        specifier: '>=6'
+        version: 6.0.3
+
+  packages/@n8n/expression-types:
     dependencies:
       '@types/luxon':
         specifier: ^3.7.5
@@ -32,32 +44,22 @@ importers:
       luxon:
         specifier: ^3.7.2
         version: 3.7.2
-    devDependencies:
-      n8n-workflow:
-        specifier: ^2.16.0
-        version: 2.16.0
 
-  packages/plugin:
-    dependencies:
-      '@n8n/expression-types':
-        specifier: workspace:*
-        version: link:../core
-
-  packages/vscode:
+  packages/vscode-n8n-expressions:
     dependencies:
       '@n8n/expression-ts-plugin':
         specifier: workspace:*
-        version: link:../plugin
+        version: link:../@n8n/expression-ts-plugin
 
   playground:
     dependencies:
       '@n8n/expression-types':
         specifier: workspace:*
-        version: link:../packages/core
+        version: link:../packages/@n8n/expression-types
     devDependencies:
       '@n8n/expression-ts-plugin':
         specifier: workspace:*
-        version: link:../packages/plugin
+        version: link:../packages/@n8n/expression-ts-plugin
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3

@@ -1,7 +1,7 @@
 // Builds a RuntimeShape from the checker's type of the data passed to resolve() or
 // Resolve<>, so the expression is analysed against whatever that argument is typed as.
 import type TS from 'typescript';
-import { isContextName, type ExpressionContext, type RuntimeShape } from './globals.ts';
+import { isContextName, type ExpressionContext, type RuntimeShape } from '@n8n/expression-types';
 
 export const shapeFromType = (
 	ts: typeof TS,

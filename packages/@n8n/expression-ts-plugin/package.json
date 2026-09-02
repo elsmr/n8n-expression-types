@@ -1,0 +1,20 @@
+{
+  "name": "@n8n/expression-ts-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.cjs",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --external:typescript --external:luxon --outfile=dist/index.cjs --log-level=warning --footer:js=\"module.exports = module.exports.default;\" && esbuild src/cli.ts --bundle --platform=node --format=esm --external:typescript --external:@n8n/expression-types --outfile=dist/cli.mjs --log-level=warning",
+    "dev": "pnpm build --watch"
+  },
+  "type": "module",
+  "dependencies": {
+    "@n8n/expression-types": "workspace:*"
+  },
+  "bin": {
+    "n8n-expressions": "./dist/cli.mjs"
+  },
+  "peerDependencies": {
+    "typescript": ">=6"
+  }
+}

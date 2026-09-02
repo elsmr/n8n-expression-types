@@ -3,22 +3,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "open": "pnpm build && code --extensionDevelopmentPath=\"$PWD/packages/vscode\" \"$PWD/playground\" \"$PWD/playground/demo.ts\"",
+    "open": "pnpm build && code --extensionDevelopmentPath=\"$PWD/packages/vscode-n8n-expressions\" --folder-uri \"file://$PWD/playground\" --goto \"$PWD/playground/demo.ts:1\"",
     "dev": "pnpm build && pnpm -r --parallel dev",
-    "build": "pnpm --filter @n8n/expression-types build && pnpm --filter @n8n/expression-ts-plugin build",
-    "test": "pnpm build && tsx packages/plugin/plugin.test.ts && tsx packages/plugin/tsserver.test.ts",
-    "typecheck": "biome format . && pnpm build && pnpm generate && tsc -p packages/plugin && tsc -p playground",
-    "generate": "node packages/core/dist/cli.js generate playground/tsconfig.json --expression-errors=warn",
-    "drift": "tsx packages/core/drift.ts",
-    "gen-extensions": "tsx packages/core/gen-extensions.ts",
-    "vsix": "pnpm build && node scripts/build-vsix.mjs",
-    "prepare": "pnpm build && pnpm generate",
+    "build": "pnpm -r build",
+    "test": "pnpm build && tsx packages/@n8n/expression-ts-plugin/plugin.test.ts && tsx packages/@n8n/expression-ts-plugin/tsserver.test.ts",
+    "typecheck": "biome format . && pnpm build && pnpm typegen && tsc -p packages/@n8n/expression-ts-plugin && tsc -p playground",
+    "typegen": "node packages/@n8n/expression-ts-plugin/dist/cli.mjs typegen playground/tsconfig.json --expression-errors=warn",
+    "gen-extensions": "tsx scripts/gen-extensions.ts",
+    "prepare": "pnpm build && pnpm typegen",
     "format": "biome format --write ."
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@types/node": "^24.0.0",
     "esbuild": "^0.28.2",
+    "n8n-workflow": "^2.16.0",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3"
   }

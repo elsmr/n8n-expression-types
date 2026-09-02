@@ -1,5 +1,5 @@
 {
-  "name": "n8n-expressions",
+  "name": "vscode-n8n-expressions",
   "displayName": "n8n Expressions",
   "description": "Syntax highlighting, type checking and completions for n8n expressions in TypeScript strings",
   "version": "0.0.0",

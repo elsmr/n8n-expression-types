@@ -1,9 +1,21 @@
-// n8n expressions as strings, checked by TypeScript.
-//   1. Declare    expr() marks a string as an expression and names its context
-//   2. Contexts   what exists depends on where the expression runs
-//   3. Resolve    data enters through resolve() and Resolve<>; types become exact
-//   4. Language   anything TypeScript knows: methods, Luxon, n8n helpers, template literals
-//   5. Errors     invalid text, data that does not fit, n8n sandbox rules
+/**
+ * n8n expressions as strings, checked by TypeScript. Five sections:
+ *   1. Declare    expr() marks a string as an expression and names its context
+ *   2. Contexts   what exists depends on where the expression runs
+ *   3. Resolve    data enters through resolve() and Resolve<>; types become exact
+ *   4. Language   anything TypeScript knows: methods, Luxon, n8n helpers, template literals
+ *   5. Errors     invalid text, data that does not fit, n8n sandbox rules
+ *
+ * Try it: hover `$json` inside a block, hover `{{`, hover a variable name. Put the cursor on
+ * `toUppercase` and open quick fixes. Type `$json.user.` for completions.
+ *
+ * The rest of the playground:
+ *   - ./sample-data.ts      the data everything here resolves against ({@link sample},
+ *                           {@link paginationSample}, {@link credentialSample})
+ *   - ./node-description.ts a node definition with branded slots; the literals carry no markers
+ *   - ./lambda.ts           expr() with a lambda instead of a string, no plugin involved
+ *   - ./types.test.ts       type-level assertions, run by `pnpm typecheck`
+ */
 import { expr, resolve, type Resolve } from '@n8n/expression-types';
 import { credentialSample, paginationSample, sample } from './sample-data.ts';
 
@@ -66,6 +78,7 @@ export const language = () => [
 ];
 
 // 5. Errors. Invalid text is wrong anywhere; a resolve error is this data not fitting.
+export const misspelt = expr('={{ $now.toISo() }}'); // wrong anywhere: $now is always a DateTime
 export const typo = expr('={{ $json.test.toUppercase() }}'); // fine alone, fails against data
 export const nullable = expr('={{ $json.nothing.x }}');
 export const unsafe = expr('={{ $json.constructor.name + $.length }}'); // n8n sandbox rules

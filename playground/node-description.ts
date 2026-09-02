@@ -3,12 +3,15 @@
 // the literals below carry no markers and the plugin still checks them from the contextual
 // type. `$parameter` is typed from the `properties` array of this description. Two errors
 // are intentional: `$parameter.operaton` in the subtitle, and `maxItems`, which assigns a
-// string-valued expression to a number slot.
-import type {
-	Expression,
-	DescriptionContext,
-	NodeParameterContext,
-	RoutingContext,
+// string-valued expression to a number slot. A slot takes the lambda form too, and there
+// TypeScript itself checks the yielded type and the context (`outputs`, `region`). A slot
+// that also admits plain `string`, like `default`, cannot be checked that way.
+import {
+	expr,
+	type Expression,
+	type DescriptionContext,
+	type NodeParameterContext,
+	type RoutingContext,
 } from '@n8n/expression-types';
 
 type NodeParameterValue = string | number | boolean | null;
@@ -51,7 +54,9 @@ interface INodeTypeDescription {
 export const description: INodeTypeDescription = {
 	displayName: 'Orders',
 	subtitle: '={{ $parameter.operation + ": " + $parameter.resource }}',
-	outputs: '={{ $parameter.operation === "split" ? ["main", "main"] : ["main"] }}',
+	outputs: expr.description(({ $parameter }) =>
+		$parameter.operation === 'split' ? ['main', 'main'] : ['main'],
+	),
 	maxItems: '={{ $parameter.resource }}', // slot error: yields string, expects number
 	properties: [
 		{
@@ -116,5 +121,17 @@ export const description: INodeTypeDescription = {
 			type: 'number',
 			default: '={{ $json.page }}',
 		}, // $json is loose here: no error
+		{
+			displayName: 'Region',
+			name: 'region',
+			type: 'string',
+			default: expr(({ $now }) => $now.zoneName),
+			routing: {
+				request: {
+					// @ts-expect-error a lambda yielding number cannot fill a string slot
+					url: expr.routing(({ $version }) => $version),
+				},
+			},
+		},
 	],
 };

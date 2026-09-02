@@ -807,6 +807,16 @@ dt.isNotEmpty() // false
 	 * @see https://docs.n8n.io/code/builtin/convenience
 	 */
 	function $ifEmpty<V, E>(value: V, defaultValue: E): V | E;
+
+	/** The helpers above as members, for the lambda form's context parameter. */
+	interface N8nHelpers {
+		$if: typeof $if;
+		$min: typeof $min;
+		$max: typeof $max;
+		$average: typeof $average;
+		$not: typeof $not;
+		$ifEmpty: typeof $ifEmpty;
+	}
 }
 
 export {};

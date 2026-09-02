@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
-const root = path.resolve(import.meta.dirname, '../..');
+const root = path.resolve(import.meta.dirname, '../../..');
 const playground = path.join(root, 'playground');
 const file = path.join(playground, 'demo.ts');
 const tsserver = path.join(

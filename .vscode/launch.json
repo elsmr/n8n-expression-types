@@ -6,7 +6,7 @@
 			"type": "extensionHost",
 			"request": "launch",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}/packages/vscode",
+				"--extensionDevelopmentPath=${workspaceFolder}/packages/vscode-n8n-expressions",
 				"${workspaceFolder}/playground",
 				"${workspaceFolder}/playground/node-description.ts"
 			],

@@ -5,11 +5,16 @@
 // expr() never carries data; resolve() and Resolve<> are where data enters.
 // Each hit carries the context, the shape to analyse against, and where to report.
 import type TS from 'typescript';
-import { emptyShape, isContextName, type ExpressionContext, type RuntimeShape } from './globals.ts';
+import {
+	emptyShape,
+	isContextName,
+	type ExpressionContext,
+	type RuntimeShape,
+} from '@n8n/expression-types';
 import { shapeFromType } from './shape-from-type.ts';
 import { enclosingParameters, enclosingValue } from './static-shape.ts';
 import type { Analysis, ExpressionService } from './service.ts';
-import { resolvedKey } from './expr.ts';
+import { resolvedKey } from '@n8n/expression-types';
 
 export type Found = {
 	kind: 'slot' | 'call' | 'resolve';
@@ -26,8 +31,6 @@ export type Found = {
 	/** The data type at a resolve() site, as text, when it only uses portable names. */
 	dataText?: string;
 };
-
-const isContext = isContextName;
 
 // Type text that only uses names every project resolves: primitives, literals, unions,
 // arrays, objects, and a few built-in generics. Anything else is not portable.
@@ -47,12 +50,10 @@ const brandOf = (ts: typeof TS, checker: TS.TypeChecker, type: TS.Type | undefin
 		const brand = checker.getPropertyOfType(t, '__n8n');
 		if (!brand) continue;
 		const bt = checker.getNonNullableType(checker.getTypeOfSymbol(brand));
-		const ctx = checker.getPropertyOfType(bt, 'context');
+		const nameSym = checker.getPropertyOfType(bt, 'name');
 		const val = checker.getPropertyOfType(bt, 'type');
-		// context is a ContextDefinition interface; its `name` literal is the identifier.
-		const nameSym = ctx && checker.getPropertyOfType(checker.getTypeOfSymbol(ctx), 'name');
 		const nameType = nameSym && checker.getTypeOfSymbol(nameSym);
-		if (!nameType?.isStringLiteral() || !isContext(nameType.value) || !val) continue;
+		if (!nameType?.isStringLiteral() || !isContextName(nameType.value) || !val) continue;
 		return {
 			context: nameType.value,
 			expected: checker.typeToString(
@@ -78,7 +79,7 @@ const exprCallContext = (ts: typeof TS, callee: TS.Expression): ExpressionContex
 		ts.isIdentifier(callee.expression) &&
 		callee.expression.text === 'expr'
 	) {
-		return isContext(callee.name.text) ? callee.name.text : undefined;
+		return isContextName(callee.name.text) ? callee.name.text : undefined;
 	}
 	return undefined;
 };
@@ -180,7 +181,7 @@ export const findExpressions = (
 /**
  * Type text for the lookup: the value type, or an error type. Without data an error means
  * the text is invalid; against data it means the data does not fit. The messages
- * themselves are diagnostics (plugin, generate), not types.
+ * themselves are diagnostics (plugin, typegen), not types.
  */
 export const resolvedType = (
 	a: Analysis,
@@ -263,14 +264,18 @@ export const reports = (ts: typeof TS, items: Array<Found & { analysis: Analysis
 		return messages.map((m) => ({ file: sf.fileName, line, message: prefix + m }));
 	});
 
+/** The files worth scanning: the project's own sources. */
+export const projectFiles = (program: TS.Program) =>
+	program
+		.getSourceFiles()
+		.filter((f) => !f.isDeclarationFile && !f.fileName.includes('/node_modules/'));
+
 /** Lookup entries and diagnostics for the given files. */
 export const collectResolved = (
 	ts: typeof TS,
 	service: ExpressionService,
 	program: TS.Program,
-	files = program
-		.getSourceFiles()
-		.filter((f) => !f.isDeclarationFile && !f.fileName.includes('/node_modules/')),
+	files = projectFiles(program),
 ) => {
 	const checker = program.getTypeChecker();
 	const items = files.flatMap((sf) =>

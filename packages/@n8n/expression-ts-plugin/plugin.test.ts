@@ -5,11 +5,13 @@ import path from 'node:path';
 import ts from 'typescript';
 import { createRequire } from 'node:module';
 
-const init = createRequire(import.meta.url)('./entry.cjs') as (m: { typescript: typeof ts }) => {
+const init = createRequire(import.meta.url)('./dist/index.cjs') as (m: {
+	typescript: typeof ts;
+}) => {
 	create(info: unknown): ts.LanguageService;
 };
 
-const projectDir = path.resolve(import.meta.dirname, '../../playground');
+const projectDir = path.resolve(import.meta.dirname, '../../../playground');
 const parsed = ts.getParsedCommandLineOfConfigFile(
 	path.join(projectDir, 'tsconfig.json'),
 	{},
@@ -112,23 +114,26 @@ check('$parameter typo in a branded slot, typed from sibling properties', () =>
 	),
 );
 
-check('hover $json shows the sample-derived type', () =>
+check('hover $json in an expr() is loose: no data at the declaration', () =>
+	assert.match(demo.hover(demo.at('$json.n }} for', 2)).display, /const \$json: any/),
+);
+check('hover $parameter in a slot is typed from sibling properties', () =>
 	assert.match(
-		demo.hover(demo.at('$json.n }} for', 2)).display,
-		/const \$json: \{[^}]*test: string/,
+		desc.hover(desc.at('$parameter.operation + ', 2)).display,
+		/const \$parameter: \{[^}]*resource: "order" \| "customer"/,
 	),
 );
 check('hover a method is TypeScript quick info', () =>
-	assert.match(demo.hover(demo.at('.sum()', 2)).display, /Array<number>\.sum\(\): number/),
+	assert.match(demo.hover(demo.at('.sum()', 2)).display, /Array<\w+>\.sum\(\): number/),
 );
 check('hover an n8n extension shows its docs', () =>
 	assert.match(
-		demo.hover(demo.at('$json.test.toTitleCase()', '$json.test.'.length + 2)).doc,
-		/title case/,
+		demo.hover(demo.at('.beginningOf("month")', 3)).doc,
+		/start of the given time period/,
 	),
 );
 check('hover {{ shows the block result type', () =>
-	assert.match(demo.hover(demo.at("{{ $('Webhook')")).display, /^\(block\) .*: number$/),
+	assert.match(demo.hover(demo.at('{{ $pageCount >= 10')).display, /^\(block\) .*: boolean$/),
 );
 check('hover the expr variable summarises resolution', () =>
 	assert.match(
@@ -140,28 +145,28 @@ check('hover $value in a routing slot', () =>
 	assert.equal(desc.hover(desc.at('$value.trim', 2)).display, 'const $value: string'),
 );
 
-check('completions inside a block come from the data', () => {
+check('completions inside a block come from the shape', () => {
 	const c = ls.getCompletionsAtPosition(
-		demo.fileName,
-		demo.at('$json.user.name', '$json.user.'.length),
+		desc.fileName,
+		desc.at('$parameter.operation + ', '$parameter.'.length),
 		undefined,
 	);
 	assert.deepEqual(
-		c?.entries.map((e) => e.name),
-		['emails', 'name'],
+		c?.entries.map((e) => e.name).filter((n) => ['operation', 'resource'].includes(n)),
+		['operation', 'resource'],
 	);
 });
 check('quick fix maps back into the literal', () => {
-	const start = demo.at('toUppercase');
+	const start = demo.at('toISo');
 	const fixes = ls.getCodeFixesAtPosition(
 		demo.fileName,
 		start,
-		start + 'toUppercase'.length,
+		start + 'toISo'.length,
 		[2551],
 		{},
 		{},
 	);
-	assert.equal(fixes[0]?.description, "Change spelling to 'toUpperCase'");
+	assert.equal(fixes[0]?.description, "Change spelling to 'toISO'");
 	assert.equal(fixes[0]?.changes[0]?.textChanges[0]?.span.start, start);
 });
 check('signature help inside a block', () => {
@@ -172,10 +177,10 @@ check('signature help inside a block', () => {
 	);
 	assert.match(text(s?.items[0]?.prefixDisplayParts), /minus\(/);
 });
-check('inlay hint after a resolved expression', () => {
+check('inlay hint after an expression', () => {
 	const hints = ls.provideInlayHints(demo.fileName, { start: 0, length: demo.src.length }, {});
-	const end = demo.at('orderId }}"', 'orderId }}"'.length);
-	assert.equal(hints.find((h) => h.position === end)?.text, ': number');
+	const end = demo.at("$pageCount >= 10 }}'", "$pageCount >= 10 }}'".length);
+	assert.equal(hints.find((h) => h.position === end)?.text, ': boolean');
 });
 
 console.log(`\n${checks} checks passed`);

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// n8n-expressions generate <tsconfig> [--expression-errors=warn]
+// n8n-expressions typegen [tsconfig] [--expression-errors=warn]   (default: ./tsconfig.json)
 // Writes the expression lookup for a project and reports every expression diagnostic.
-// Run it before plain `tsc` in CI. Expression diagnostics fail the run unless
+// Run it before plain `tsc`. Expression diagnostics fail the run unless
 // --expression-errors=warn is passed.
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import ts from 'typescript';
 import { createExpressionService } from './service.ts';
@@ -10,8 +11,8 @@ import { collectResolved, renderResolved } from './scan.ts';
 import { lookupFile, writeLookup } from './lookup-file.ts';
 
 const [command, ...args] = process.argv.slice(2);
-if (command !== 'generate') {
-	console.error('usage: n8n-expressions generate <tsconfig> [--expression-errors=warn]');
+if (command !== 'typegen') {
+	console.error('usage: n8n-expressions typegen [tsconfig] [--expression-errors=warn]');
 	process.exit(2);
 }
 const warnOnly = args.includes('--expression-errors=warn');
@@ -29,7 +30,10 @@ const parsed = ts.getParsedCommandLineOfConfigFile(
 	},
 )!;
 const program = ts.createProgram(parsed.fileNames, parsed.options);
-const service = createExpressionService({ ts, root: path.resolve(import.meta.dirname, '..') });
+const root = path.dirname(
+	createRequire(import.meta.url).resolve('@n8n/expression-types/package.json'),
+);
+const service = createExpressionService({ ts, root });
 const { entries, reports } = collectResolved(ts, service, program);
 const written = writeLookup(projectDir, renderResolved(entries));
 

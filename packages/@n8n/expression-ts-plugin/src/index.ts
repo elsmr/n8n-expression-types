@@ -4,36 +4,23 @@
 // positions mapped back. It adds block and expression types, n8n's sandbox rules, and
 // keeps the lookup that makes resolved types flow in sync while you type. The lookup is a
 // real file under <project>/.n8n (tsserver rejects memory-only roots), added as a root
-// file here so no tsconfig entry is needed in the editor; `n8n-expressions generate`
+// file here so no tsconfig entry is needed in the editor; `n8n-expressions typegen`
 // writes the same file for plain tsc.
 
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import type TS from 'typescript';
-import {
-	createExpressionService,
-	type Analysis,
-	type RuntimeShape,
-} from '@n8n/expression-types/service';
+import { createExpressionService, type Analysis } from './service.ts';
 import {
 	findExpressions,
 	lookupEntries,
+	projectFiles,
 	renderResolved,
 	type Found,
-} from '@n8n/expression-types/scan';
-import {
-	lookupFile as lookupFileFor,
-	readLookup,
-	writeLookup,
-} from '@n8n/expression-types/lookup-file';
+} from './scan.ts';
+import { lookupFile as lookupFileFor, readLookup, writeLookup } from './lookup-file.ts';
 
-type Item = Found & {
-	analysis: Analysis;
-	/** Richest shape known for this expression: from a resolve() site when one exists. */
-	hoverShape: RuntimeShape;
-	/** Analysis against hoverShape, for block result types on hover. */
-	hoverAnalysis: Analysis;
-};
+type Item = Found & { analysis: Analysis };
 
 // A project lists the plugin in tsconfig and the VS Code extension injects it too:
 // the second create() for the same project must not decorate twice.
@@ -53,44 +40,39 @@ const init = (modules: { typescript: typeof TS }) => {
 		const projectDir = info.project.getCurrentDirectory();
 		const service = createExpressionService({ ts, root });
 
-		const cache = new Map<string, { version: string; items: Item[] }>();
+		// Cached per file, keyed on the versions of every file its items read a literal from:
+		// a resolve() site in B analyses the text declared in A, so editing A must refresh B.
+		const version = (fileName: string) => info.languageServiceHost.getScriptVersion(fileName);
+		const cache = new Map<string, { versions: Map<string, string>; items: Item[] }>();
 		const itemsFor = (fileName: string): Item[] => {
-			const version = info.languageServiceHost.getScriptVersion(fileName);
 			const hit = cache.get(fileName);
-			if (hit?.version === version) return hit.items;
+			if (hit && [...hit.versions].every(([f, v]) => version(f) === v)) return hit.items;
 			const program = ls.getProgram();
 			const sf = program?.getSourceFile(fileName);
 			if (!program || !sf) return [];
 			const found = findExpressions(ts, sf, program.getTypeChecker());
-			const items: Item[] = found.map((f) => {
-				const resolved =
-					f.kind === 'call'
-						? found.find(
-								(o) =>
-									o.kind === 'resolve' && o.expression === f.expression && o.context === f.context,
-							)
-						: undefined;
-				const analysis = service.analyze(f.expression, f.shape, f.expected);
-				const hoverShape = resolved?.shape ?? f.shape;
-				const hoverAnalysis = resolved ? service.analyze(f.expression, hoverShape) : analysis;
-				return { ...f, analysis, hoverShape, hoverAnalysis };
-			});
-			cache.set(fileName, { version, items });
+			const items: Item[] = found.map((f) => ({
+				...f,
+				analysis: service.analyze(f.expression, f.shape, f.expected),
+			}));
+			const deps = [fileName, ...items.map((it) => it.node.getSourceFile().fileName)];
+			const versions = new Map(deps.map((f): [string, string] => [f, version(f)]));
+			cache.set(fileName, { versions, items });
 			return items;
+		};
+		/** Every expression in the project. The first call scans everything; later calls hit the cache. */
+		const projectItems = (): Item[] => {
+			const program = ls.getProgram();
+			return program ? projectFiles(program).flatMap((sf) => itemsFor(sf.fileName)) : [];
 		};
 		const itemAt = (fileName: string, position: number) =>
 			itemsFor(fileName).find(
 				(it) =>
-					!it.reportAt &&
+					it.kind !== 'resolve' &&
 					position >= it.textStart &&
 					position <= it.textStart + it.expression.length,
 			);
-		const blockAt = (it: Item, position: number) =>
-			it.analysis.blocks.find(
-				(b) => position >= it.textStart + b.start && position <= it.textStart + b.end,
-			);
 
-		const resolvedByFile = new Map<string, Item[]>();
 		const lookupFile = lookupFileFor(projectDir);
 		let lookupText = readLookup(projectDir) ?? '';
 		if (!lookupText) {
@@ -105,12 +87,9 @@ const init = (modules: { typescript: typeof TS }) => {
 			return names.includes(lookupFile) ? names : [lookupFile, ...names];
 		};
 
-		const syncResolved = (fileName: string, items: Item[]) => {
-			const mine = items.filter((i) => i.kind !== 'slot');
-			if (mine.length === 0 && !resolvedByFile.has(fileName)) return;
-			resolvedByFile.set(fileName, mine);
-			// Recompute across files so a resolve() in one file types an expr() in another.
-			const next = renderResolved(lookupEntries([...resolvedByFile.values()].flat()));
+		// The whole project, not just open files: the same lookup `typegen` writes.
+		const syncResolved = () => {
+			const next = renderResolved(lookupEntries(projectItems()));
 			if (next === lookupText) return;
 			lookupText = next;
 			writeLookup(projectDir, next);
@@ -133,7 +112,7 @@ const init = (modules: { typescript: typeof TS }) => {
 			const prior = ls.getSemanticDiagnostics(fileName);
 			const sf = ls.getProgram()?.getSourceFile(fileName);
 			if (!sf) return prior;
-			syncResolved(fileName, itemsFor(fileName));
+			syncResolved();
 			// Same codes as TypeScript's own diagnostics, so they read as ts(2339) in the editor.
 			const diag = (
 				start: number,
@@ -180,15 +159,12 @@ const init = (modules: { typescript: typeof TS }) => {
 		const withResolveSummary = (fileName: string, position: number): TS.QuickInfo | undefined => {
 			const prior = ls.getQuickInfoAtPosition(fileName, position);
 			const shown = prior?.displayParts?.map((p) => p.text).join('') ?? '';
-			const m = /\b(?:Expr|InvalidExpr)<(\w+)Context, "((?:[^"\\]|\\.)*)">/.exec(shown);
+			const m = /\b(?:Expr|InvalidExpr)<\w+Context(?:<\{\}>)?, "((?:[^"\\]|\\.)*)">/.exec(shown);
 			if (!prior || !m) return prior;
-			const text = JSON.parse(`"${m[2]}"`) as string;
-			const sites = [...resolvedByFile.values()]
-				.flat()
-				.filter((i) => i.kind === 'resolve' && i.expression === text);
-			const loose = [...resolvedByFile.values()]
-				.flat()
-				.find((i) => i.kind === 'call' && i.expression === text);
+			const text = JSON.parse(`"${m[1]}"`) as string;
+			const all = projectItems();
+			const sites = all.filter((i) => i.kind === 'resolve' && i.expression === text);
+			const loose = all.find((i) => i.kind === 'call' && i.expression === text);
 			const types = [...new Set(sites.map((s) => s.analysis.type))];
 			const summary = sites.length
 				? `Resolves to \`${types.join(' | ')}\` against ${sites.length} data set${sites.length === 1 ? '' : 's'}.`
@@ -207,7 +183,7 @@ const init = (modules: { typescript: typeof TS }) => {
 			const it = itemAt(fileName, position);
 			if (!it) return withResolveSummary(fileName, position);
 			const offset = position - it.textStart;
-			const v = service.virtual(it.expression, it.hoverShape);
+			const v = service.virtual(it.expression, it.shape);
 			// Styled like TypeScript's own "(kind) name: type" hovers.
 			const info = (
 				label: string,
@@ -230,7 +206,7 @@ const init = (modules: { typescript: typeof TS }) => {
 				],
 			});
 			const analysed = (b: { start: number }) =>
-				it.hoverAnalysis.blocks.find((a) => a.start === b.start);
+				it.analysis.blocks.find((a) => a.start === b.start);
 
 			const block = v.blockAt(offset);
 			if (block) {
@@ -257,7 +233,7 @@ const init = (modules: { typescript: typeof TS }) => {
 					length: delimited.body.length + 4,
 				});
 			}
-			return info('expression', it.context, it.hoverAnalysis.type, {
+			return info('expression', it.context, it.analysis.type, {
 				start: it.node.getStart(),
 				length: it.node.getWidth(),
 			});
@@ -272,7 +248,7 @@ const init = (modules: { typescript: typeof TS }) => {
 		): R => {
 			const it = itemAt(fileName, position);
 			if (!it) return fallback();
-			const v = service.virtual(it.expression, it.hoverShape);
+			const v = service.virtual(it.expression, it.shape);
 			const pos = v.toFile(position - it.textStart);
 			return pos === undefined ? fallback() : inner(v, pos);
 		};
@@ -345,7 +321,7 @@ const init = (modules: { typescript: typeof TS }) => {
 			);
 			const it = itemAt(fileName, start);
 			if (!it || it.reportAt) return prior;
-			const v = service.virtual(it.expression, it.hoverShape);
+			const v = service.virtual(it.expression, it.shape);
 			const from = v.toFile(start - it.textStart);
 			const to = v.toFile(end - it.textStart);
 			if (from === undefined || to === undefined) return prior;
@@ -383,37 +359,45 @@ const init = (modules: { typescript: typeof TS }) => {
 			return [...prior, ...mapped];
 		};
 
-		proxy.getCompletionsAtPosition = (fileName, position, options, formatting) => {
-			const it = itemAt(fileName, position);
-			const block = it && blockAt(it, position);
-			if (!it || !block)
-				return ls.getCompletionsAtPosition(fileName, position, options, formatting);
-			const entries = service.completionsAt(it.expression, position - it.textStart, it.hoverShape);
-			return {
-				isGlobalCompletion: false,
-				isMemberCompletion: true,
-				isNewIdentifierLocation: false,
-				entries,
-			};
-		};
+		// Keywords and warnings make no sense inside a block; the rest is TypeScript's.
+		proxy.getCompletionsAtPosition = (fileName, position, options, formatting) =>
+			forward(
+				fileName,
+				position,
+				(v, pos) => {
+					const inner = v.languageService.getCompletionsAtPosition(
+						v.fileName,
+						pos,
+						options,
+						formatting,
+					);
+					if (!inner) return undefined;
+					const entries = inner.entries.filter(
+						(e) =>
+							e.kind !== ts.ScriptElementKind.warning && e.kind !== ts.ScriptElementKind.keyword,
+					);
+					return { ...inner, isGlobalCompletion: false, isMemberCompletion: true, entries };
+				},
+				() => ls.getCompletionsAtPosition(fileName, position, options, formatting),
+			);
 
 		proxy.provideInlayHints = (fileName, span, preferences) => {
 			const prior = ls.provideInlayHints(fileName, span, preferences);
 			const visible = itemsFor(fileName).filter(
 				(it) =>
-					!it.reportAt &&
+					it.kind !== 'resolve' &&
 					it.node.getEnd() >= span.start &&
 					it.node.getStart() <= span.start + span.length,
 			);
 			const typeHints: TS.InlayHint[] = visible.map((it) => ({
-				text: `: ${it.hoverAnalysis.type}`,
+				text: `: ${it.analysis.type}`,
 				position: it.node.getEnd(),
 				kind: ts.InlayHintKind.Type,
 				paddingLeft: true,
 			}));
 			// Parameter-name hints and friends from inside the blocks, mapped back.
 			const inner: TS.InlayHint[] = visible.flatMap((it) => {
-				const v = service.virtual(it.expression, it.hoverShape);
+				const v = service.virtual(it.expression, it.shape);
 				return v.blocks.flatMap((b) =>
 					v.languageService
 						.provideInlayHints(
@@ -433,12 +417,12 @@ const init = (modules: { typescript: typeof TS }) => {
 			const spans = [...prior.spans];
 			for (const it of itemsFor(fileName)) {
 				if (
-					it.reportAt ||
+					it.kind === 'resolve' ||
 					it.node.getEnd() < span.start ||
 					it.node.getStart() > span.start + span.length
 				)
 					continue;
-				const v = service.virtual(it.expression, it.hoverShape);
+				const v = service.virtual(it.expression, it.shape);
 				for (const b of v.blocks) {
 					const inner = v.languageService.getEncodedSemanticClassifications(
 						v.fileName,
