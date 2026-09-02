@@ -1,5 +1,5 @@
 {
-  "name": "n8n-expression-types",
+  "name": "@n8n/expression-types",
   "version": "0.0.0",
   "private": true,
   "type": "module",

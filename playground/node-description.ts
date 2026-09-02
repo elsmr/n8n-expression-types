@@ -1,7 +1,7 @@
 // Branded slots: the interface says which fields are expressions and in which context.
 // Nothing marks the literals themselves. This mimics what INodeTypeDescription in
 // n8n-workflow would declare; the plugin reads the contextual type.
-import type { Expression, DescriptionContext, NodeParameterContext, RoutingContext } from 'n8n-expression-types';
+import type { Expression, DescriptionContext, NodeParameterContext, RoutingContext } from '@n8n/expression-types';
 
 type NodeParameterValue = string | number | boolean | null;
 type ParameterType = 'string' | 'number' | 'boolean' | 'options' | 'collection' | 'fixedCollection' | 'multiOptions';

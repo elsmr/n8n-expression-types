@@ -1,13 +1,13 @@
 {
-  "name": "n8n-expression-types-monorepo",
+  "name": "@n8n/expression-types-monorepo",
   "private": true,
   "type": "module",
   "scripts": {
-    "build:plugin": "pnpm --filter n8n-expression-ts-plugin build",
+    "build:plugin": "pnpm --filter @n8n/expression-ts-plugin build",
     "prepare": "pnpm build:plugin",
-    "demo": "pnpm --filter n8n-expression-types demo",
-    "drift": "pnpm --filter n8n-expression-types drift",
-    "gen-extensions": "pnpm --filter n8n-expression-types gen-extensions",
+    "demo": "pnpm --filter @n8n/expression-types demo",
+    "drift": "pnpm --filter @n8n/expression-types drift",
+    "gen-extensions": "pnpm --filter @n8n/expression-types gen-extensions",
     "gen-resolved": "tsx packages/core/gen-resolved.ts playground/tsconfig.json",
     "smoke": "pnpm build:plugin && tsx packages/plugin/smoke.ts",
     "typecheck": "tsc -p packages/core && tsc -p packages/plugin && pnpm gen-resolved && tsc -p playground"

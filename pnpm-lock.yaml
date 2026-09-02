@@ -36,23 +36,23 @@ importers:
 
   packages/plugin:
     dependencies:
-      n8n-expression-types:
+      '@n8n/expression-types':
         specifier: workspace:*
         version: link:../core
 
   packages/vscode:
     dependencies:
-      n8n-expression-ts-plugin:
+      '@n8n/expression-ts-plugin':
         specifier: workspace:*
         version: link:../plugin
 
   playground:
     dependencies:
-      n8n-expression-types:
+      '@n8n/expression-types':
         specifier: workspace:*
         version: link:../packages/core
     devDependencies:
-      n8n-expression-ts-plugin:
+      '@n8n/expression-ts-plugin':
         specifier: workspace:*
         version: link:../packages/plugin
 

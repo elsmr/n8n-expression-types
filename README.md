@@ -5,8 +5,8 @@ the TypeScript language service. A pnpm monorepo:
 
 | Package | What |
 | --- | --- |
-| `packages/core` (`n8n-expression-types`) | The service, the globals per context, `expr()`/`resolve()`, the lambda form, generators. |
-| `packages/plugin` (`n8n-expression-ts-plugin`) | tsserver plugin. Inside `{{ }}` it forwards TypeScript's own hover, completions, signature help, quick fixes, inlay hints and semantic highlighting from a virtual file; adds block/expression types, n8n sandbox rules, and keeps `n8n-resolved.d.ts` in sync. |
+| `packages/core` (`@n8n/expression-types`) | The service, the globals per context, `expr()`/`resolve()`, the lambda form, generators. |
+| `packages/plugin` (`@n8n/expression-ts-plugin`) | tsserver plugin. Inside `{{ }}` it forwards TypeScript's own hover, completions, signature help, quick fixes, inlay hints and semantic highlighting from a virtual file; adds block/expression types, n8n sandbox rules, and keeps `n8n-resolved.d.ts` in sync. |
 | `packages/vscode` | VS Code extension: `{{ }}` highlighting in strings, and it loads the plugin via `typescriptServerPlugins`. |
 | `playground` | Examples. Open in VS Code, or `pnpm smoke` to drive the plugin headless. |
 

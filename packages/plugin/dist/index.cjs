@@ -706,11 +706,9 @@ var init = (modules) => {
       const text = JSON.parse(`"${m[2]}"`);
       const sites = [...resolvedByFile.values()].flat().filter((i) => i.kind === "resolve" && i.expression === text);
       const loose = [...resolvedByFile.values()].flat().find((i) => i.kind === "call" && i.expression === text);
-      const lines = [
-        `Definition-time type: ${loose?.analysis.type ?? "unknown"}`,
-        ...sites.length ? [`Resolved at ${sites.length} site${sites.length === 1 ? "" : "s"}: ${[...new Set(sites.map((s) => s.analysis.type))].join(" | ")}`] : ["Not resolved against data anywhere."]
-      ];
-      return { ...prior, documentation: [...prior.documentation ?? [], { text: lines.join("\n"), kind: "text" }] };
+      const types = [...new Set(sites.map((s) => s.analysis.type))];
+      const summary = sites.length ? `Resolves to \`${types.join(" | ")}\` against ${sites.length} data set${sites.length === 1 ? "" : "s"}.` : loose && loose.analysis.type !== "any" ? `Evaluates to \`${loose.analysis.type}\`. Not resolved against data.` : "Not resolved against data; the type depends on runtime input.";
+      return { ...prior, documentation: [...prior.documentation ?? [], { text: summary, kind: "text" }] };
     };
     proxy.getQuickInfoAtPosition = (fileName, position) => {
       const it = itemAt(fileName, position);

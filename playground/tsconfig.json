@@ -8,7 +8,7 @@
     "noEmit": true,
     "skipLibCheck": true,
     "types": [],
-    "plugins": [{ "name": "n8n-expression-ts-plugin" }]
+    "plugins": [{ "name": "@n8n/expression-ts-plugin" }]
   },
   "include": ["*.ts"]
 }

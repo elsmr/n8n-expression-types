@@ -1,6 +1,6 @@
 // Sample data expressions can be typed against. `as const` keeps node names and
 // variable names literal; json values are widened by the tooling.
-import type { RuntimeTypes } from 'n8n-expression-types';
+import type { RuntimeTypes } from '@n8n/expression-types';
 
 export const runtime = {
 	input: {

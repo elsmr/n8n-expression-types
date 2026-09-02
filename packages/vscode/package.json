@@ -3,7 +3,7 @@
   "displayName": "n8n Expressions",
   "description": "Syntax highlighting, type checking and completions for n8n expressions in TypeScript strings",
   "version": "0.0.0",
-  "publisher": "elsmr",
+  "publisher": "n8n",
   "private": true,
   "engines": { "vscode": "^1.90.0" },
   "categories": ["Programming Languages"],
@@ -18,10 +18,10 @@
       }
     ],
     "typescriptServerPlugins": [
-      { "name": "n8n-expression-ts-plugin", "enableForWorkspaceTypeScriptVersions": true }
+      { "name": "@n8n/expression-ts-plugin", "enableForWorkspaceTypeScriptVersions": true }
     ]
   },
   "dependencies": {
-    "n8n-expression-ts-plugin": "workspace:*"
+    "@n8n/expression-ts-plugin": "workspace:*"
   }
 }

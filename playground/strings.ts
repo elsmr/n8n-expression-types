@@ -1,7 +1,7 @@
 // String form. expr() marks the literal and names the context. Data only enters through
 // resolve(); the plugin (or `pnpm gen-resolved`) writes n8n-resolved.d.ts so the types
 // flow: strict where a resolve() exists for the expression, loose otherwise.
-import { expr, resolve, type Resolve } from 'n8n-expression-types';
+import { expr, resolve, type Resolve } from '@n8n/expression-types';
 import { pagination, runtime } from './runtime.ts';
 
 // No shape: runtime data is loose, so anything under $json typechecks. Globals still do.
@@ -19,6 +19,7 @@ export const typo = expr('={{ $json.test.toUppercase() }}');                    
 export const nullable = expr('={{ $json.nothing.x }}');
 export const title = expr('={{ $json.test.toTitleCase() }}');
 export const stamp = expr('={{ $now.toISO() }}');                                    // Resolve<typeof stamp, {}> is string | null
+export const stamp = expr('={{ $now }}');                                    // Resolve<typeof stamp, {}> is string | null
 
 // Type only: the type an expression yields against specific data, without evaluating.
 export type NextUrl = Resolve<typeof nextUrl, typeof pagination>;                      // string

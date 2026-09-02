@@ -7,8 +7,8 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type TS from 'typescript';
-import { createExpressionService, type Analysis, type RuntimeShape } from 'n8n-expression-types/service';
-import { findExpressions, lookupEntries, renderResolved, type Found } from 'n8n-expression-types/scan';
+import { createExpressionService, type Analysis, type RuntimeShape } from '@n8n/expression-types/service';
+import { findExpressions, lookupEntries, renderResolved, type Found } from '@n8n/expression-types/scan';
 
 type Item = Found & {
 	analysis: Analysis;
@@ -125,13 +125,13 @@ const init = (modules: { typescript: typeof TS }) => {
 			const text = JSON.parse(`"${m[2]}"`) as string;
 			const sites = [...resolvedByFile.values()].flat().filter((i) => i.kind === 'resolve' && i.expression === text);
 			const loose = [...resolvedByFile.values()].flat().find((i) => i.kind === 'call' && i.expression === text);
-			const lines = [
-				`Definition-time type: ${loose?.analysis.type ?? 'unknown'}`,
-				...(sites.length
-					? [`Resolved at ${sites.length} site${sites.length === 1 ? '' : 's'}: ${[...new Set(sites.map((s) => s.analysis.type))].join(' | ')}`]
-					: ['Not resolved against data anywhere.']),
-			];
-			return { ...prior, documentation: [...(prior.documentation ?? []), { text: lines.join('\n'), kind: 'text' }] };
+			const types = [...new Set(sites.map((s) => s.analysis.type))];
+			const summary = sites.length
+				? `Resolves to \`${types.join(' | ')}\` against ${sites.length} data set${sites.length === 1 ? '' : 's'}.`
+				: loose && loose.analysis.type !== 'any'
+					? `Evaluates to \`${loose.analysis.type}\`. Not resolved against data.`
+					: 'Not resolved against data; the type depends on runtime input.';
+			return { ...prior, documentation: [...(prior.documentation ?? []), { text: summary, kind: 'text' }] };
 		};
 
 		proxy.getQuickInfoAtPosition = (fileName, position) => {

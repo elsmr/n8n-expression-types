@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "n8n-expression-types": "workspace:*"
+    "@n8n/expression-types": "workspace:*"
   },
   "devDependencies": {
-    "n8n-expression-ts-plugin": "workspace:*"
+    "@n8n/expression-ts-plugin": "workspace:*"
   }
 }
