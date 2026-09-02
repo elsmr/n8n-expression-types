@@ -5,18 +5,18 @@ import { expr, resolve, type Resolve } from 'n8n-expression-types';
 import { pagination, runtime } from './runtime.ts';
 
 // No shape: runtime data is loose, so anything under $json typechecks. Globals still do.
-export const loose = expr('={{ $json.whatever.you.like.toTitleCase() }}');        // any
-export const badGlobal = expr('={{ $pageCount }}');                                  // error: not in nodeParameter
-export const paged = expr.httpPagination('={{ $response.body.next ?? $request.url }}'); // string, body loose
+export const loose = expr('={{ $json.whatever.you.like.toTitleCase() }}');        // Expr<"nodeParameter", "...">
+export const badGlobal = expr('={{ $pageCount }}');                                  // InvalidExpr<"nodeParameter", "...">: not in this context
+export const paged = expr.httpPagination('={{ $response.body.next ?? $request.url }}'); // Expr<"httpPagination", "...">
 
 // Declared without data: definition-time types, runtime holes loose.
-export const orderId = expr("={{ $('Webhook').item.json.body.orderId }}");          // Expression<any>
-export const subject = expr('=Order {{ $json.n }} for {{ $json.user.name }}');      // Expression<string>: text around blocks
-export const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');        // Expression<any>
-export const nextUrl = expr.httpPagination('={{ $response.body.next }}');           // Expression<any, 'httpPagination'>
-export const typo = expr('={{ $json.test.toUppercase() }}');                        // Expression<any>: $json.test is loose here
-export const nullable = expr('={{ $json.nothing.x }}');                              // Expression<any>
-export const stamp = expr('={{ $now.toISO() }}');                                    // Expression<string | null>: no runtime hole
+export const orderId = expr("={{ $('Webhook').item.json.body.orderId }}");
+export const subject = expr('=Order {{ $json.n }} for {{ $json.user.name }}');
+export const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');
+export const nextUrl = expr.httpPagination('={{ $response.body.next }}');
+export const typo = expr('={{ $json.test.toUppercase() }}');                        // valid here: $json.test is loose
+export const nullable = expr('={{ $json.nothing.x }}');
+export const stamp = expr('={{ $now.toISO() }}');                                    // Resolve<typeof stamp, {}> is string | null
 
 // Type only: the type an expression yields against specific data, without evaluating.
 export type NextUrl = Resolve<typeof nextUrl, typeof pagination>;                      // string

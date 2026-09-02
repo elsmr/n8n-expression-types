@@ -38,10 +38,13 @@ const description: INodeTypeDescription = { subtitle: '={{ $parameter.operation 
 **Call.** Where no slot exists, `expr()` names the context. It never carries data:
 
 ```ts
-const paged = expr.httpPagination('={{ $response.body.next }}');
-const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');
-const typo  = expr('={{ $json.test.toUppercase() }}');
+const paged = expr.httpPagination('={{ $response.body.next }}');   // Expr<"httpPagination", "...">
+const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');  // Expr<"nodeParameter", "...">
+const bad   = expr('={{ $pageCount }}');                            // InvalidExpr<"nodeParameter", "...">
 ```
+
+`Expr` and `InvalidExpr` show the declaration; the result type is derived inside and
+surfaces through slots, `resolve()` and `Resolve<>`.
 
 **Evaluation** is n8n's. `resolve(expression, data)` is where data enters, and
 `Resolve<typeof expression, typeof data>` is the same check as a type, without a call. The plugin
