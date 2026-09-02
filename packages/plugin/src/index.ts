@@ -8,8 +8,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type TS from 'typescript';
 import { createExpressionService, type Analysis } from 'n8n-expression-types/service';
-import { findExpressions, renderResolved, resolvedType, type Found } from 'n8n-expression-types/scan';
-import { resolvedKey } from 'n8n-expression-types';
+import { findExpressions, lookupEntries, renderResolved, type Found } from 'n8n-expression-types/scan';
 
 type Item = Found & { analysis: Analysis };
 
@@ -52,16 +51,14 @@ const init = (modules: { typescript: typeof TS }) => {
 			it.analysis.blocks.find((b) => position >= it.textStart + b.start && position <= it.textStart + b.end);
 
 		// ----- generated lookup for resolve() -----
-		const resolvedByFile = new Map<string, Map<string, string>>();
+		const resolvedByFile = new Map<string, Item[]>();
 		const resolvedPath = path.join(projectDir, 'n8n-resolved.d.ts');
 		const syncResolved = (fileName: string, items: Item[]) => {
-			const mine = new Map(
-				items.filter((i) => i.kind === 'call').map((i) => [resolvedKey(i.context, i.expression), resolvedType(i.analysis)] as const),
-			);
-			if (mine.size === 0 && !resolvedByFile.has(fileName)) return;
+			const mine = items.filter((i) => i.kind !== 'slot');
+			if (mine.length === 0 && !resolvedByFile.has(fileName)) return;
 			resolvedByFile.set(fileName, mine);
-			const all = new Map<string, string>();
-			for (const m of resolvedByFile.values()) for (const [k, v] of m) all.set(k, v);
+			// Recompute across files so a resolve() in one file types an expr() in another.
+			const all = lookupEntries([...resolvedByFile.values()].flat());
 			const next = renderResolved(all);
 			const current = existsSync(resolvedPath) ? readFileSync(resolvedPath, 'utf8') : '';
 			if (next !== current) {

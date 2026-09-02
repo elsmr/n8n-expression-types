@@ -5,6 +5,7 @@ declare global {
 		"httpPagination::={{ $response.body.next }}": string;
 		"nodeParameter::={{ $('Webhook').item.json.body.orderId }}": number;
 		"nodeParameter::={{ $input.all().map((i) => i.json.n).sum() }}": number;
+		"nodeParameter::={{ $json.n * 2 }}": number;
 		"nodeParameter::={{ $json.nothing.x }}": N8nInvalidExpression<"'$json.nothing' is possibly 'null'.">;
 		"nodeParameter::={{ $json.test.toUppercase() }}": N8nInvalidExpression<"Property 'toUppercase' does not exist on type 'string'. Did you mean 'toUpperCase'?">;
 		"nodeParameter::={{ $json.whatever.you.like.toTitleCase() }}": any;

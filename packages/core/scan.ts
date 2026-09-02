@@ -1,6 +1,8 @@
 // Finds marked n8n expressions in a source file. Two markers, no fallback:
 //   - a branded slot: the literal's contextual type is Expression<T, C>
 //   - a call: expr('...'), expr.<context>('...'), or resolve(expressionVar, data)
+//   - a type: Resolve<typeof expressionVar, typeof data>, checked without evaluating
+// expr() never carries data; resolve() and Resolve<> are where data enters.
 // Each hit carries the context, the shape to analyse against, and where to report.
 import type TS from 'typescript';
 import { EXPRESSION_CONTEXTS, emptyShape, type ExpressionContext, type RuntimeShape } from './globals.ts';
@@ -83,10 +85,7 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
 			const [first, second] = node.arguments;
 			const ctx = first && exprCallContext(ts, callee);
 			if (ctx && ts.isStringLiteralLike(first)) {
-				const shape = second
-					? shapeFromType(ts, checker, checker.getTypeAtLocation(second), ctx)
-					: staticShape(ts, first, ctx);
-				push({ kind: 'call', node: first, context: ctx, shape: { ...shape, context: ctx } });
+				push({ kind: 'call', node: first, context: ctx, shape: staticShape(ts, first, ctx) });
 				ts.forEachChild(node, visit);
 				return;
 			}
@@ -95,6 +94,22 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
 				if (behind) {
 					const context = behind.context ?? 'nodeParameter';
 					const shape = shapeFromType(ts, checker, checker.getTypeAtLocation(second), context);
+					push({
+						kind: 'resolve',
+						node: behind.literal,
+						context: shape.context,
+						shape,
+						reportAt: { start: node.getStart(sf), length: node.getWidth(sf) },
+					});
+				}
+			}
+		} else if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === 'Resolve') {
+			const [exprArg, dataArg] = node.typeArguments ?? [];
+			if (exprArg && dataArg && ts.isTypeQueryNode(exprArg) && ts.isIdentifier(exprArg.exprName)) {
+				const behind = literalBehind(ts, checker, exprArg.exprName);
+				if (behind) {
+					const context = behind.context ?? 'nodeParameter';
+					const shape = shapeFromType(ts, checker, checker.getTypeFromTypeNode(dataArg), context);
 					push({
 						kind: 'resolve',
 						node: behind.literal,
@@ -135,7 +150,31 @@ export const renderResolved = (entries: Map<string, string>): string => {
 	return `// Generated from expr() calls. Do not edit.\ndeclare global {\n\tinterface N8nResolvedTypes {\n${lines.join('\n')}\n\t}\n}\nexport {};\n`;
 };
 
-/** Lookup entries for every expr() call in the given files. */
+/**
+ * Lookup entries from analysed items. A resolve() call knows the data, so its type wins
+ * over the loose type of the expr() declaration; several resolve() sites union.
+ */
+export const lookupEntries = (items: Array<Found & { analysis: Analysis }>): Map<string, string> => {
+	const strict = new Map<string, { valid: Set<string>; invalid: Set<string> }>();
+	const loose = new Map<string, string>();
+	for (const it of items) {
+		const key = resolvedKey(it.context, it.expression);
+		if (it.kind === 'resolve') {
+			const entry = strict.get(key) ?? { valid: new Set<string>(), invalid: new Set<string>() };
+			const type = resolvedType(it.analysis);
+			(type.startsWith('N8nInvalidExpression<') ? entry.invalid : entry.valid).add(type);
+			strict.set(key, entry);
+		} else if (it.kind === 'call') {
+			loose.set(key, resolvedType(it.analysis));
+		}
+	}
+	// A site that fails is reported at that site; it must not poison the sites that pass.
+	const out = new Map(loose);
+	for (const [key, { valid, invalid }] of strict) out.set(key, [...(valid.size ? valid : invalid)].join(' | '));
+	return out;
+};
+
+/** Lookup entries for the given files. */
 export const collectResolved = (
 	ts: typeof TS,
 	service: ExpressionService,
@@ -143,11 +182,8 @@ export const collectResolved = (
 	files = program.getSourceFiles().filter((f) => !f.isDeclarationFile && !f.fileName.includes('/node_modules/')),
 ): Map<string, string> => {
 	const checker = program.getTypeChecker();
-	const entries = new Map<string, string>();
-	for (const sf of files) {
-		for (const f of findExpressions(ts, sf, checker)) {
-			if (f.kind === 'call') entries.set(resolvedKey(f.context, f.expression), resolvedType(service.analyze(f.expression, f.shape)));
-		}
-	}
-	return entries;
+	const items = files.flatMap((sf) =>
+		findExpressions(ts, sf, checker).map((f) => ({ ...f, analysis: service.analyze(f.expression, f.shape, f.expected) })),
+	);
+	return lookupEntries(items);
 };

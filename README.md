@@ -35,19 +35,21 @@ const description: INodeTypeDescription = { subtitle: '={{ $parameter.operation 
 //                                                     ^ checked; $parameter derived from `properties`
 ```
 
-**Call.** Where no slot exists, `expr()` names the context and optionally a runtime sample:
+**Call.** Where no slot exists, `expr()` names the context. It never carries data:
 
 ```ts
-const paged = expr.httpPagination('={{ $response.body.next }}');          // Expression<any, 'httpPagination'>
-const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}', runtime);  // Expression<number>
-const typo  = expr('={{ $json.test.toUppercase() }}', runtime);            // Expression<N8nInvalidExpression<...>>
+const paged = expr.httpPagination('={{ $response.body.next }}');
+const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');
+const typo  = expr('={{ $json.test.toUppercase() }}');
 ```
 
-The plugin writes `<project>/n8n-resolved.d.ts` with one entry per `(context, text)` so
-these types flow through the checker. `pnpm gen-resolved` does the same for CI.
-
-**Evaluation** is n8n's. `resolve(expression, data)` carries the type and the plugin
-re-checks the expression against `data` at the call.
+**Evaluation** is n8n's. `resolve(expression, data)` is where data enters, and
+`Resolve<typeof expression, typeof data>` is the same check as a type, without a call. The plugin
+checks the expression against `data` at the call, and the generated lookup takes the
+type from there: `total` above is `Expression<number>` once `resolve(total, runtime)`
+exists, `typo` becomes `Expression<N8nInvalidExpression<...>>`, and an expression that
+is never resolved keeps its loose definition-time type. The plugin writes
+`<project>/n8n-resolved.d.ts`; `pnpm gen-resolved` does the same for CI.
 
 ## Contexts
 

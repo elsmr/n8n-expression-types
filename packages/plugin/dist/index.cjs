@@ -139,9 +139,9 @@ export {};
 
 // ../core/service.ts
 var BLOCK = /\{\{([\s\S]*?)\}\}/g;
-var compile = (expression2) => {
-  if (!expression2.startsWith("=")) return { blocks: [], source: "", hasText: true };
-  const body = expression2.slice(1);
+var compile = (expression) => {
+  if (!expression.startsWith("=")) return { blocks: [], source: "", hasText: true };
+  const body = expression.slice(1);
   const blocks = [];
   const lines = [];
   for (const m of body.matchAll(BLOCK)) {
@@ -192,18 +192,18 @@ var createExpressionService = ({ ts, root }) => {
     readDirectory: ts.sys.readDirectory
   };
   const service = ts.createLanguageService(host, ts.createDocumentRegistry());
-  const load = (expression2, shape, expected) => {
+  const load = (expression, shape, expected) => {
     set(GLOBALS_FILE, buildGlobals(shape));
-    const compiled = compile(expression2);
+    const compiled = compile(expression);
     const single = !compiled.hasText && compiled.blocks.length === 1;
     const check = expected ? `
 const __expected: ${expected} = ${single ? "__r0" : "'' as string"};` : "";
     set(EXPR_FILE, compiled.source + check);
     return compiled;
   };
-  const analyze = (expression2, shape, expected) => {
-    const { blocks, hasText } = load(expression2, shape, expected);
-    if (blocks.length === 0) return { type: JSON.stringify(expression2), blocks: [] };
+  const analyze = (expression, shape, expected) => {
+    const { blocks, hasText } = load(expression, shape, expected);
+    if (blocks.length === 0) return { type: JSON.stringify(expression), blocks: [] };
     const program = service.getProgram();
     const checker = program.getTypeChecker();
     const sf = program.getSourceFile(EXPR_FILE);
@@ -229,8 +229,8 @@ const __expected: ${expected} = ${single ? "__r0" : "'' as string"};` : "";
     const slotError = checkStmt ? diags.filter((d) => d.start !== void 0 && d.start >= checkStmt.getStart(sf) && d.start <= checkStmt.getEnd()).map(() => `Expression yields ${type}, slot expects ${expected}.`)[0] : void 0;
     return { type, blocks: typed, ...slotError ? { slotError } : {} };
   };
-  const completionsAt = (expression2, offset, shape) => {
-    const { blocks } = load(expression2, shape);
+  const completionsAt = (expression, offset, shape) => {
+    const { blocks } = load(expression, shape);
     const block = blocks.find((b) => offset >= b.start && offset <= b.end);
     if (!block) return [];
     const pos = block.fileStart + (offset - block.start);
@@ -401,8 +401,8 @@ var enclosingValue = (ts, node) => {
 };
 
 // ../core/expr.ts
-var resolvedKey = (context, expression2) => `${context}::${expression2}`;
-var make = (_context) => (expression2) => expression2;
+var resolvedKey = (context, expression) => `${context}::${expression}`;
+var make = (_context) => (expression) => expression;
 var expr = Object.assign(
   make("nodeParameter"),
   Object.fromEntries(EXPRESSION_CONTEXTS.map((c) => [c, make(c)]))
@@ -457,8 +457,7 @@ var findExpressions = (ts, sf, checker) => {
       const [first, second] = node.arguments;
       const ctx = first && exprCallContext(ts, callee);
       if (ctx && ts.isStringLiteralLike(first)) {
-        const shape = second ? shapeFromType(ts, checker, checker.getTypeAtLocation(second), ctx) : staticShape(ts, first, ctx);
-        push({ kind: "call", node: first, context: ctx, shape: { ...shape, context: ctx } });
+        push({ kind: "call", node: first, context: ctx, shape: staticShape(ts, first, ctx) });
         ts.forEachChild(node, visit);
         return;
       }
@@ -467,6 +466,22 @@ var findExpressions = (ts, sf, checker) => {
         if (behind) {
           const context = behind.context ?? "nodeParameter";
           const shape = shapeFromType(ts, checker, checker.getTypeAtLocation(second), context);
+          push({
+            kind: "resolve",
+            node: behind.literal,
+            context: shape.context,
+            shape,
+            reportAt: { start: node.getStart(sf), length: node.getWidth(sf) }
+          });
+        }
+      }
+    } else if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === "Resolve") {
+      const [exprArg, dataArg] = node.typeArguments ?? [];
+      if (exprArg && dataArg && ts.isTypeQueryNode(exprArg) && ts.isIdentifier(exprArg.exprName)) {
+        const behind = literalBehind(ts, checker, exprArg.exprName);
+        if (behind) {
+          const context = behind.context ?? "nodeParameter";
+          const shape = shapeFromType(ts, checker, checker.getTypeFromTypeNode(dataArg), context);
           push({
             kind: "resolve",
             node: behind.literal,
@@ -508,6 +523,24 @@ ${lines.join("\n")}
 export {};
 `;
 };
+var lookupEntries = (items) => {
+  const strict = /* @__PURE__ */ new Map();
+  const loose = /* @__PURE__ */ new Map();
+  for (const it of items) {
+    const key = resolvedKey(it.context, it.expression);
+    if (it.kind === "resolve") {
+      const entry = strict.get(key) ?? { valid: /* @__PURE__ */ new Set(), invalid: /* @__PURE__ */ new Set() };
+      const type = resolvedType(it.analysis);
+      (type.startsWith("N8nInvalidExpression<") ? entry.invalid : entry.valid).add(type);
+      strict.set(key, entry);
+    } else if (it.kind === "call") {
+      loose.set(key, resolvedType(it.analysis));
+    }
+  }
+  const out = new Map(loose);
+  for (const [key, { valid, invalid }] of strict) out.set(key, [...valid.size ? valid : invalid].join(" | "));
+  return out;
+};
 
 // src/index.ts
 var decorated = /* @__PURE__ */ new WeakSet();
@@ -542,13 +575,10 @@ var init = (modules) => {
     const resolvedByFile = /* @__PURE__ */ new Map();
     const resolvedPath = import_node_path.default.join(projectDir, "n8n-resolved.d.ts");
     const syncResolved = (fileName, items) => {
-      const mine = new Map(
-        items.filter((i) => i.kind === "call").map((i) => [resolvedKey(i.context, i.expression), resolvedType(i.analysis)])
-      );
-      if (mine.size === 0 && !resolvedByFile.has(fileName)) return;
+      const mine = items.filter((i) => i.kind !== "slot");
+      if (mine.length === 0 && !resolvedByFile.has(fileName)) return;
       resolvedByFile.set(fileName, mine);
-      const all = /* @__PURE__ */ new Map();
-      for (const m of resolvedByFile.values()) for (const [k, v] of m) all.set(k, v);
+      const all = lookupEntries([...resolvedByFile.values()].flat());
       const next = renderResolved(all);
       const current = (0, import_node_fs.existsSync)(resolvedPath) ? (0, import_node_fs.readFileSync)(resolvedPath, "utf8") : "";
       if (next !== current) {

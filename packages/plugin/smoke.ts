@@ -51,6 +51,7 @@ for (const d of diags) {
 }
 
 const at = (needle: string, delta = 0) => text.indexOf(needle) + delta;
+console.log('  (type-only Resolve<> diagnostics appear above at their line)');
 const hover = ls.getQuickInfoAtPosition(file, at('body.orderId', 6));
 console.log('\nhover on orderId:', hover?.displayParts?.map((p) => p.text).join(''));
 
