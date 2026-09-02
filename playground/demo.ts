@@ -5,7 +5,7 @@
 //   4. Language   anything TypeScript knows: methods, Luxon, n8n helpers, template literals
 //   5. Errors     invalid text, data that does not fit, n8n sandbox rules
 import { expr, resolve, type Resolve } from '@n8n/expression-types';
-import { credentialData, pagination, runtime } from './runtime.ts';
+import { credentialSample, paginationSample, sample } from './sample-data.ts';
 
 // 1. Declare. Nothing is known about the data yet, so $json is loose.
 export const orderId = expr("={{ $('Webhook').item.json.body.orderId }}");
@@ -27,17 +27,17 @@ export const badGlobal = expr('={{ $pageCount }}');                             
 
 // 3. Resolve. The plugin checks each expression against the data; the type is exact for that pairing.
 export const resolved = () => {
-	const a: number = resolve(orderId, runtime);
-	const b: string = resolve(subject, runtime);
-	const c: number = resolve(total, runtime);
-	const d: string = resolve(multiline, runtime);
-	const e: string = resolve(nextUrl, pagination);
-	const f: boolean = resolve(stop, pagination);
-	const g: string = resolve(auth, credentialData);
+	const a: number = resolve(orderId, sample);
+	const b: string = resolve(subject, sample);
+	const c: number = resolve(total, sample);
+	const d: string = resolve(multiline, sample);
+	const e: string = resolve(nextUrl, paginationSample);
+	const f: boolean = resolve(stop, paginationSample);
+	const g: string = resolve(auth, credentialSample);
 	return [a, b, c, d, e, f, g];
 };
-export type NextUrl = Resolve<typeof nextUrl, typeof pagination>;                // string
-export type OrderId = Resolve<typeof orderId, typeof runtime>;                  // number
+export type NextUrl = Resolve<typeof nextUrl, typeof paginationSample>;                // string
+export type OrderId = Resolve<typeof orderId, typeof sample>;                  // number
 export type NoNext = Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>; // N8nResolveError
 
 // 4. Language. Hover for TypeScript's own quick info; n8n methods carry their docs.
@@ -51,15 +51,15 @@ export const safe = expr('={{ $json.user?.emails?.[0] ?? "none" }}');
 export const mime = expr('={{ $binary.data.mimeType }}');
 export const key = expr('={{ $vars.apiKey }}');
 export const language = () => [
-	resolve(title, runtime),
-	resolve(email, runtime),
-	resolve(when, runtime),
-	resolve(pick, runtime),
-	resolve(fallback, runtime),
-	resolve(card, runtime),
-	resolve(safe, runtime),
-	resolve(mime, runtime),
-	resolve(key, runtime),
+	resolve(title, sample),
+	resolve(email, sample),
+	resolve(when, sample),
+	resolve(pick, sample),
+	resolve(fallback, sample),
+	resolve(card, sample),
+	resolve(safe, sample),
+	resolve(mime, sample),
+	resolve(key, sample),
 ];
 
 // 5. Errors. Invalid text is wrong anywhere; a resolve error is this data not fitting.
@@ -68,12 +68,12 @@ export const nullable = expr('={{ $json.nothing.x }}');
 export const unsafe = expr('={{ $json.constructor.name + $.length }}');          // n8n sandbox rules
 export const errors = () => {
 	// @ts-expect-error N8nResolveError: toUppercase is not on string
-	const a: string = resolve(typo, runtime);
+	const a: string = resolve(typo, sample);
 	// @ts-expect-error N8nResolveError: $json.nothing is null
-	const b: unknown[] = [resolve(nullable, runtime).x];
+	const b: unknown[] = [resolve(nullable, sample).x];
 	// @ts-expect-error N8nInvalidExpression: $pageCount does not exist in this context, whatever the data
-	const c: number = resolve(badGlobal, runtime);
+	const c: number = resolve(badGlobal, sample);
 	// @ts-expect-error N8nResolveError: this body has no `next`
-	const d: string = resolve(nextUrl, { ...pagination, response: { items: [] } });
+	const d: string = resolve(nextUrl, { ...paginationSample, response: { items: [] } });
 	return [a, b, c, d];
 };

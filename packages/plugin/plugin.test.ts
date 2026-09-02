@@ -72,40 +72,40 @@ const check = (label: string, fn: () => void) => {
 	console.log(`ok  ${label}`);
 };
 
-const strings = open('strings.ts');
+const demo = open('demo.ts');
 const desc = open('node-description.ts');
 
 check('unknown global for the context is a diagnostic', () =>
-	assert.ok(strings.added().some((m) => m.startsWith("Cannot find name '$pageCount'"))));
+	assert.ok(demo.added().some((m) => m.startsWith("Cannot find name '$pageCount'"))));
 check('n8n sandbox rules are diagnostics', () =>
-	assert.ok(strings.added().some((m) => m.includes('constructor')) && strings.added().some((m) => m.includes('"$"'))));
+	assert.ok(demo.added().some((m) => m.includes('constructor')) && demo.added().some((m) => m.includes('"$"'))));
 check('resolve() sites report against their data', () =>
-	assert.ok(strings.added().some((m) => m.startsWith("Property 'next' does not exist") && m.includes('against this data'))));
+	assert.ok(demo.added().some((m) => m.startsWith("Property 'next' does not exist") && m.includes('against this data'))));
 check('slot type mismatch is a diagnostic', () =>
 	assert.ok(desc.added().some((m) => m.includes('slot expects number'))));
 check('$parameter typo in a branded slot, typed from sibling properties', () =>
 	assert.ok(desc.added().some((m) => m.includes("'operaton'") && m.includes("Did you mean 'operation'"))));
 
 check('hover $json shows the sample-derived type', () =>
-	assert.match(strings.hover(strings.at('$json.n }} for', 2)).display, /const \$json: \{[^}]*test: string/));
+	assert.match(demo.hover(demo.at('$json.n }} for', 2)).display, /const \$json: \{[^}]*test: string/));
 check('hover a method is TypeScript quick info', () =>
-	assert.match(strings.hover(strings.at('.sum()', 2)).display, /Array<number>\.sum\(\): number/));
+	assert.match(demo.hover(demo.at('.sum()', 2)).display, /Array<number>\.sum\(\): number/));
 check('hover an n8n extension shows its docs', () =>
-	assert.match(strings.hover(strings.at('$json.test.toTitleCase()', '$json.test.'.length + 2)).doc, /title case/));
+	assert.match(demo.hover(demo.at('$json.test.toTitleCase()', '$json.test.'.length + 2)).doc, /title case/));
 check('hover {{ shows the block result type', () =>
-	assert.match(strings.hover(strings.at("{{ $('Webhook')")).display, /^\(block\) .*: number$/));
+	assert.match(demo.hover(demo.at("{{ $('Webhook')")).display, /^\(block\) .*: number$/));
 check('hover the expr variable summarises resolution', () =>
-	assert.match(strings.hover(strings.at('const orderId', 'const '.length + 2)).doc, /Resolves to `number`/));
+	assert.match(demo.hover(demo.at('const orderId', 'const '.length + 2)).doc, /Resolves to `number`/));
 check('hover $value in a routing slot', () =>
 	assert.equal(desc.hover(desc.at('$value.trim', 2)).display, 'const $value: string'));
 
 check('completions inside a block come from the data', () => {
-	const c = ls.getCompletionsAtPosition(strings.fileName, strings.at('$json.user.name', '$json.user.'.length), undefined);
+	const c = ls.getCompletionsAtPosition(demo.fileName, demo.at('$json.user.name', '$json.user.'.length), undefined);
 	assert.deepEqual(c?.entries.map((e) => e.name), ['emails', 'name']);
 });
 check('quick fix maps back into the literal', () => {
-	const start = strings.at('toUppercase');
-	const fixes = ls.getCodeFixesAtPosition(strings.fileName, start, start + 'toUppercase'.length, [2551], {}, {});
+	const start = demo.at('toUppercase');
+	const fixes = ls.getCodeFixesAtPosition(demo.fileName, start, start + 'toUppercase'.length, [2551], {}, {});
 	assert.equal(fixes[0]?.description, "Change spelling to 'toUpperCase'");
 	assert.equal(fixes[0]?.changes[0]?.textChanges[0]?.span.start, start);
 });
@@ -114,8 +114,8 @@ check('signature help inside a block', () => {
 	assert.match(text(s?.items[0]?.prefixDisplayParts), /minus\(/);
 });
 check('inlay hint after a resolved expression', () => {
-	const hints = ls.provideInlayHints(strings.fileName, { start: 0, length: strings.src.length }, {});
-	const end = strings.at('orderId }}"', 'orderId }}"'.length);
+	const hints = ls.provideInlayHints(demo.fileName, { start: 0, length: demo.src.length }, {});
+	const end = demo.at('orderId }}"', 'orderId }}"'.length);
 	assert.equal(hints.find((h) => h.position === end)?.text, ': number');
 });
 

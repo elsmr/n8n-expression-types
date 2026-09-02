@@ -6,7 +6,6 @@
     "open": "pnpm build:plugin && code --extensionDevelopmentPath=\"$PWD/packages/vscode\" \"$PWD/playground\" \"$PWD/playground/node-description.ts\"",
     "test": "pnpm build:plugin && tsx packages/plugin/plugin.test.ts",
     "typecheck": "tsc -p packages/core && tsc -p packages/plugin && pnpm gen-resolved && tsc -p playground",
-    "demo": "tsx playground/service-demo.ts",
     "drift": "tsx packages/core/drift.ts",
     "gen-resolved": "tsx packages/core/gen-resolved.ts playground/tsconfig.json",
     "gen-extensions": "tsx packages/core/gen-extensions.ts",

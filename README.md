@@ -9,8 +9,8 @@ string, the resulting type flows into surrounding code, and CI can gate on it.
 const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');
 //                       ^ hover: (method) Array<number>.sum(): number
 
-resolve(total, runtime);                 // number
-resolve(typo, runtime);                  // N8nResolveError, and the line is underlined:
+resolve(total, sample);                  // number
+resolve(typo, sample);                  // N8nResolveError, and the line is underlined:
 //   Property 'toUppercase' does not exist on type 'string'. Did you mean 'toUpperCase'?
 ```
 
@@ -48,15 +48,15 @@ const bad  = expr('={{ $pageCount }}');                           // InvalidExpr
 the data's type, and the result type is specific to that pairing.
 
 ```ts
-const url: string = resolve(next, pagination);
-type Url = Resolve<typeof next, typeof pagination>;              // string
+const url: string = resolve(next, paginationSample);
+type Url = Resolve<typeof next, typeof paginationSample>;        // string
 type Bad = Resolve<typeof next, { response: { items: number[] } }>; // N8nResolveError
 ```
 
 **Lambda form.** For expressions authored in TypeScript: no parser, native checking.
 
 ```ts
-expression(({ $json, $ }) => $json.n * $('Webhook').item.json.body.orderId, runtime);
+expression(({ $json, $ }) => $json.n * $('Webhook').item.json.body.orderId, sample);
 ```
 
 **Editor.** Everything TypeScript gives you, forwarded into the string: hover on `$json`
@@ -108,13 +108,12 @@ the moment it is passed to `resolve()`.
 | `packages/core` | `@n8n/expression-types`: service, contexts and globals, `expr`/`resolve`, lambda form, generators, drift check |
 | `packages/plugin` | `@n8n/expression-ts-plugin`: the tsserver plugin |
 | `packages/vscode` | VS Code extension: `{{ }}` highlighting, bundles the plugin |
-| `playground` | The tour, type tests, `service-demo.ts` |
+| `playground` | The tour and the type tests |
 | `docs/design.md` | Decisions, alternatives rejected, known gaps, cost numbers |
 
 ```sh
 pnpm test         # plugin behaviour, headless
 pnpm typecheck    # core, plugin, generate lookup, playground incl. type tests
-pnpm demo         # service API without an editor
 pnpm drift        # n8n-workflow globals vs declared layers
 ```
 
