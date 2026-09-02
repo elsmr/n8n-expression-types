@@ -136,17 +136,27 @@ const recordOf = (keys: readonly string[] | undefined, valueType: string) =>
 type Layer = (s: RuntimeShape) => string;
 
 const core: Layer = (s) => `
+	/** The current date and time as a Luxon DateTime, in the workflow timezone. */
 	const $now: DateTime;
+	/** Today at midnight as a Luxon DateTime, in the workflow timezone. */
 	const $today: DateTime;
+	/** Workflow variables, all strings. */
 	const $vars: ${recordOf(s.vars, 'string')};
+	/** Environment variables, when access is allowed. */
 	const $env: ${recordOf(s.env, 'string')};
+	/** External secrets by provider, when enabled. */
 	const $secrets: Record<string, Record<string, any>>;
+	/** Data about the current execution: id, mode, resume URLs, customData. */
 	const $execution: N8nExecution;
 	const $evaluation: { runId: string } | undefined;
+	/** How the workflow was started. */
 	const $mode: N8nMode;
+	/** The current workflow: id, name, active. */
 	const $workflow: N8nWorkflow;
+	/** Queries data with a JMESPath expression. */
 	function $jmespath(data: Record<string, any> | any[], query: string): any;
 	function $jmesPath(data: Record<string, any> | any[], query: string): any;
+	/** Evaluates an expression string at runtime. Returns any. */
 	function $evaluateExpression(expression: string, itemIndex?: number): any;`;
 
 const item: Layer = (s) => {
@@ -160,12 +170,17 @@ const item: Layer = (s) => {
 	interface NodeDataMap {
 		${nodeDataMap}
 	}
+	/** JSON data of the current input item. */
 	const $json: ${J};
 	/** @deprecated use $json */
 	const $data: ${J};
+	/** Binary data of the current input item, by property name. */
 	const $binary: Record<${B}, N8nBinaryData>;
+	/** The current node's input: item, first(), last(), all(), params. */
 	const $input: N8nInput<${J}, ${B}, ${P}>;
+	/** The current input item, json and binary. */
 	const $thisItem: N8nItem<${J}, ${B}>;
+	/** Output of another node in the workflow: item, first(), last(), all(), params, isExecuted. */
 	function $<K extends keyof NodeDataMap>(nodeName: K, resolveFullItem?: boolean): NodeDataMap[K];
 	function $(nodeName?: string, resolveFullItem?: boolean): N8nAnyNodeData;
 	/** @deprecated use $('Node') */
@@ -175,14 +190,19 @@ const item: Layer = (s) => {
 	function $items(nodeName?: string, outputIndex?: number, runIndex?: number): Array<N8nItem<${LOOSE}, string>>;
 	/** @deprecated */
 	function $item(itemIndex: number, runIndex?: number): any;
+	/** The current node's parameters, resolved. */
 	const $parameter: ${P};
 	const $rawParameter: ${P};
+	/** Index of the item this expression runs for. */
 	const $itemIndex: number;
+	/** How many times the current node has run in this execution. */
 	const $runIndex: number;
 	const $position: number;
 	const $thisItemIndex: number;
 	const $thisRunIndex: number;
+	/** The node the current input came from: name, outputIndex, runIndex. */
 	const $prevNode: N8nPrevNode;
+	/** Type version of the current node. */
 	const $nodeVersion: number;
 	const $nodeId: string;
 	const $webhookId: string | undefined;
@@ -190,9 +210,12 @@ const item: Layer = (s) => {
 	const $executionId: string;
 	/** @deprecated use $execution.resumeUrl */
 	const $resumeWebhookUrl: string;
+	/** Tool call context inside AI tool nodes. */
 	const $tool: any;
+	/** Tools and memory connected to the current AI Agent node. */
 	const $agentInfo: N8nAgentInfo;
 	function $getPairedItem(destinationNodeName: string, incomingSourceData: unknown, pairedItem: unknown): N8nItem<${LOOSE}, string> | null;
+	/** In AI tool nodes: lets the model fill this value. */
 	function $fromAI(name: string, description?: string, type?: N8nFromAIType, defaultValue?: unknown): any;
 	function $fromAi(name: string, description?: string, type?: N8nFromAIType, defaultValue?: unknown): any;
 	function $fromai(name: string, description?: string, type?: N8nFromAIType, defaultValue?: unknown): any;`;
@@ -200,6 +223,7 @@ const item: Layer = (s) => {
 
 // subtitle, outputs: getSimpleParameterValue with the node's parameters, no input data.
 const description: Layer = (s) => `
+	/** The current node's parameters, resolved. */
 	const $parameter: ${or(s.parameters)};
 	const $rawParameter: ${or(s.parameters)};
 	const $nodeVersion: number;
@@ -208,19 +232,27 @@ const description: Layer = (s) => `
 
 // Declarative nodes (routing-node.ts): request, send, output and postReceive expressions.
 const routing: Layer = (s) => `
+	/** Decrypted credential fields of the credential used by this node. */
 	const $credentials: ${or(s.credentials)};
+	/** The current value of the parameter this routing expression belongs to. */
 	const $value: ${or(s.value)};
 	const $version: number;
+	/** The HTTP response: body, headers, statusCode. */
 	const $response: N8nHttpResponse<${or(s.response)}>;
+	/** One item of the parsed response, in postReceive expressions. */
 	const $responseItem: ${or(s.responseItem)};
+	/** The HTTP request as sent: url, method, headers, qs, body. */
 	const $request: N8nHttpRequest<${or(s.request)}>;
 	const $self: ${or(s.credentials)};`;
 
 // HTTP Request pagination (request-helpers/pagination.ts:95).
 const pagination: Layer = (s) => `
+	/** The HTTP request as sent: url, method, headers, qs, body. */
 	const $request: N8nHttpRequest<${or(s.request)}>;
+	/** The HTTP response: body, headers, statusCode. */
 	const $response: N8nHttpResponse<${or(s.response)}>;
 	const $version: number;
+	/** Number of pages fetched so far, starting at 0. */
 	const $pageCount: number;`;
 
 // Credential fields: getAdditionalKeys(isCredential) gives $vars/$secrets; $self is the credential.

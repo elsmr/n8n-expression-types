@@ -155,7 +155,34 @@ export const createExpressionService = ({ ts, root }: Options) => {
 		);
 	};
 
-	return { analyze, completionsAt, globalsFor: buildGlobals };
+	/**
+	 * Loads the expression and exposes the inner language service with position mapping,
+	 * so callers can forward quick info, signature help or completion details for a token.
+	 */
+	const virtual = (expression: string, shape: RuntimeShape) => {
+		const { blocks } = load(expression, shape);
+		const blockAt = (offset: number) => blocks.find((b) => offset >= b.start && offset <= b.end);
+		return {
+			fileName: EXPR_FILE,
+			languageService: service,
+			blocks,
+			blockAt,
+			/** Expression offset → virtual file position, when inside a block. */
+			toFile: (offset: number) => {
+				const b = blockAt(offset);
+				return b ? b.fileStart + (offset - b.start) : undefined;
+			},
+			/** Virtual file span → expression span, clipped to the block it belongs to. */
+			toExpression: (span: TS.TextSpan): TS.TextSpan | undefined => {
+				const b = blocks.find((b) => span.start >= b.fileStart && span.start <= b.fileStart + b.body.length);
+				if (!b) return undefined;
+				const start = b.start + (span.start - b.fileStart);
+				return { start, length: Math.min(span.length, b.end - start) };
+			},
+		};
+	};
+
+	return { analyze, completionsAt, virtual, globalsFor: buildGlobals };
 };
 
 export type ExpressionService = ReturnType<typeof createExpressionService>;

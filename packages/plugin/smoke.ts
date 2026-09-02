@@ -52,8 +52,24 @@ for (const d of diags) {
 
 const at = (needle: string, delta = 0) => text.indexOf(needle) + delta;
 console.log('  (type-only Resolve<> diagnostics appear above at their line)');
-const hover = ls.getQuickInfoAtPosition(file, at('body.orderId', 6));
-console.log('\nhover on orderId:', hover?.displayParts?.map((p) => p.text).join(''));
+const show = (label: string, q: ts.QuickInfo | undefined) =>
+	console.log(`  ${label}: ${q?.displayParts?.map((p) => p.text).join('').replace(/\n/g, ' ') ?? '(none)'}`);
+console.log('\nhover (strings.ts):');
+show('$json', ls.getQuickInfoAtPosition(file, at('$json.n }} for', 2)));
+show('.user', ls.getQuickInfoAtPosition(file, at('$json.user.name', '$json.'.length + 1)));
+show('$input.all', ls.getQuickInfoAtPosition(file, at('$input.all()', '$input.'.length + 1)));
+show('.sum()', ls.getQuickInfoAtPosition(file, at('.sum()', 2)));
+show('{{ delimiter', ls.getQuickInfoAtPosition(file, at("{{ $('Webhook')", 0)));
+show('}} delimiter', ls.getQuickInfoAtPosition(file, at("orderId }}", 'orderId '.length + 1)));
+show('text outside blocks', ls.getQuickInfoAtPosition(file, at('=Order', 2)));
+show('$pageCount (invalid)', ls.getQuickInfoAtPosition(file, at('$pageCount }}', 2)));
+show('.toTitleCase (docs)', ls.getQuickInfoAtPosition(file, at('$json.test.toTitleCase()', '$json.test.'.length + 2)));
+const doc = ls.getQuickInfoAtPosition(file, at('$json.test.toTitleCase()', '$json.test.'.length + 2))?.documentation?.map((p) => p.text).join('');
+console.log('  .toTitleCase documentation:', doc?.slice(0, 120));
+const descFile = path.join(projectDir, 'node-description.ts');
+const dt = files.get(descFile)!;
+const sig = ls.getSignatureHelpItems(descFile, dt.indexOf('$now.minus(') + '$now.minus('.length, undefined);
+console.log('  signature help at $now.minus(:', sig?.items[0] ? sig.items[0].prefixDisplayParts.concat(sig.items[0].parameters.flatMap((p) => p.displayParts)).map((p) => p.text).join('').slice(0, 80) : '(none)');
 
 const completions = ls.getCompletionsAtPosition(file, at('$json.user.name', '$json.user.'.length), undefined);
 console.log('\ncompletions after $json.user.:', completions?.entries.map((e) => e.name).join(', '));

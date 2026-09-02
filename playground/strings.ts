@@ -16,6 +16,7 @@ export const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');
 export const nextUrl = expr.httpPagination('={{ $response.body.next }}');
 export const typo = expr('={{ $json.test.toUppercase() }}');                        // valid here: $json.test is loose
 export const nullable = expr('={{ $json.nothing.x }}');
+export const title = expr('={{ $json.test.toTitleCase() }}');
 export const stamp = expr('={{ $now.toISO() }}');                                    // Resolve<typeof stamp, {}> is string | null
 
 // Type only: the type an expression yields against specific data, without evaluating.
@@ -30,6 +31,7 @@ export const check = () => {
 	const a = resolve(orderId, runtime);
 	const b: string = resolve(subject, runtime);
 	const c: number = resolve(total, runtime);
+	const t: string = resolve(title, runtime);
 	const d: string = resolve(nextUrl, pagination);
 	// @ts-expect-error 'next' does not exist on this body: N8nResolveError<...>
 	const e: string = resolve(nextUrl, { ...pagination, response: { items: [] } });
@@ -39,5 +41,5 @@ export const check = () => {
 	const g: string = resolve(typo, runtime);
 	// @ts-expect-error N8nInvalidExpression: $pageCount does not exist in nodeParameter, whatever the data
 	const h: number = resolve(badGlobal, runtime);
-	return [a, b, c, d, e, f, g, h];
+	return [a, b, c, d, e, f, g, h, t];
 };

@@ -50,17 +50,27 @@ var or = (text) => text ?? LOOSE;
 var keyUnion = (keys, fallback) => keys && keys.length > 0 ? keys.map((k) => JSON.stringify(k)).join(" | ") : fallback;
 var recordOf = (keys, valueType) => keys && keys.length > 0 ? `{ ${keys.map((k) => `${JSON.stringify(k)}: ${valueType}`).join("; ")} }` : `Record<string, ${valueType}>`;
 var core = (s) => `
+	/** The current date and time as a Luxon DateTime, in the workflow timezone. */
 	const $now: DateTime;
+	/** Today at midnight as a Luxon DateTime, in the workflow timezone. */
 	const $today: DateTime;
+	/** Workflow variables, all strings. */
 	const $vars: ${recordOf(s.vars, "string")};
+	/** Environment variables, when access is allowed. */
 	const $env: ${recordOf(s.env, "string")};
+	/** External secrets by provider, when enabled. */
 	const $secrets: Record<string, Record<string, any>>;
+	/** Data about the current execution: id, mode, resume URLs, customData. */
 	const $execution: N8nExecution;
 	const $evaluation: { runId: string } | undefined;
+	/** How the workflow was started. */
 	const $mode: N8nMode;
+	/** The current workflow: id, name, active. */
 	const $workflow: N8nWorkflow;
+	/** Queries data with a JMESPath expression. */
 	function $jmespath(data: Record<string, any> | any[], query: string): any;
 	function $jmesPath(data: Record<string, any> | any[], query: string): any;
+	/** Evaluates an expression string at runtime. Returns any. */
 	function $evaluateExpression(expression: string, itemIndex?: number): any;`;
 var item = (s) => {
   const J = or(s.inputJson);
@@ -71,12 +81,17 @@ var item = (s) => {
 	interface NodeDataMap {
 		${nodeDataMap}
 	}
+	/** JSON data of the current input item. */
 	const $json: ${J};
 	/** @deprecated use $json */
 	const $data: ${J};
+	/** Binary data of the current input item, by property name. */
 	const $binary: Record<${B}, N8nBinaryData>;
+	/** The current node's input: item, first(), last(), all(), params. */
 	const $input: N8nInput<${J}, ${B}, ${P}>;
+	/** The current input item, json and binary. */
 	const $thisItem: N8nItem<${J}, ${B}>;
+	/** Output of another node in the workflow: item, first(), last(), all(), params, isExecuted. */
 	function $<K extends keyof NodeDataMap>(nodeName: K, resolveFullItem?: boolean): NodeDataMap[K];
 	function $(nodeName?: string, resolveFullItem?: boolean): N8nAnyNodeData;
 	/** @deprecated use $('Node') */
@@ -86,14 +101,19 @@ var item = (s) => {
 	function $items(nodeName?: string, outputIndex?: number, runIndex?: number): Array<N8nItem<${LOOSE}, string>>;
 	/** @deprecated */
 	function $item(itemIndex: number, runIndex?: number): any;
+	/** The current node's parameters, resolved. */
 	const $parameter: ${P};
 	const $rawParameter: ${P};
+	/** Index of the item this expression runs for. */
 	const $itemIndex: number;
+	/** How many times the current node has run in this execution. */
 	const $runIndex: number;
 	const $position: number;
 	const $thisItemIndex: number;
 	const $thisRunIndex: number;
+	/** The node the current input came from: name, outputIndex, runIndex. */
 	const $prevNode: N8nPrevNode;
+	/** Type version of the current node. */
 	const $nodeVersion: number;
 	const $nodeId: string;
 	const $webhookId: string | undefined;
@@ -101,31 +121,43 @@ var item = (s) => {
 	const $executionId: string;
 	/** @deprecated use $execution.resumeUrl */
 	const $resumeWebhookUrl: string;
+	/** Tool call context inside AI tool nodes. */
 	const $tool: any;
+	/** Tools and memory connected to the current AI Agent node. */
 	const $agentInfo: N8nAgentInfo;
 	function $getPairedItem(destinationNodeName: string, incomingSourceData: unknown, pairedItem: unknown): N8nItem<${LOOSE}, string> | null;
+	/** In AI tool nodes: lets the model fill this value. */
 	function $fromAI(name: string, description?: string, type?: N8nFromAIType, defaultValue?: unknown): any;
 	function $fromAi(name: string, description?: string, type?: N8nFromAIType, defaultValue?: unknown): any;
 	function $fromai(name: string, description?: string, type?: N8nFromAIType, defaultValue?: unknown): any;`;
 };
 var description = (s) => `
+	/** The current node's parameters, resolved. */
 	const $parameter: ${or(s.parameters)};
 	const $rawParameter: ${or(s.parameters)};
 	const $nodeVersion: number;
 	const $nodeId: string;
 	const $self: ${or(s.credentials)};`;
 var routing = (s) => `
+	/** Decrypted credential fields of the credential used by this node. */
 	const $credentials: ${or(s.credentials)};
+	/** The current value of the parameter this routing expression belongs to. */
 	const $value: ${or(s.value)};
 	const $version: number;
+	/** The HTTP response: body, headers, statusCode. */
 	const $response: N8nHttpResponse<${or(s.response)}>;
+	/** One item of the parsed response, in postReceive expressions. */
 	const $responseItem: ${or(s.responseItem)};
+	/** The HTTP request as sent: url, method, headers, qs, body. */
 	const $request: N8nHttpRequest<${or(s.request)}>;
 	const $self: ${or(s.credentials)};`;
 var pagination = (s) => `
+	/** The HTTP request as sent: url, method, headers, qs, body. */
 	const $request: N8nHttpRequest<${or(s.request)}>;
+	/** The HTTP response: body, headers, statusCode. */
 	const $response: N8nHttpResponse<${or(s.response)}>;
 	const $version: number;
+	/** Number of pages fetched so far, starting at 0. */
 	const $pageCount: number;`;
 var credential = (s) => `
 	const $self: ${or(s.credentials)};`;
@@ -247,7 +279,29 @@ const __expected: ${expected} = ${single ? "__r0" : "'' as string"};` : "";
       (e) => e.kind !== ts.ScriptElementKind.warning && e.kind !== ts.ScriptElementKind.keyword
     );
   };
-  return { analyze, completionsAt, globalsFor: buildGlobals };
+  const virtual = (expression, shape) => {
+    const { blocks } = load(expression, shape);
+    const blockAt = (offset) => blocks.find((b) => offset >= b.start && offset <= b.end);
+    return {
+      fileName: EXPR_FILE,
+      languageService: service,
+      blocks,
+      blockAt,
+      /** Expression offset → virtual file position, when inside a block. */
+      toFile: (offset) => {
+        const b = blockAt(offset);
+        return b ? b.fileStart + (offset - b.start) : void 0;
+      },
+      /** Virtual file span → expression span, clipped to the block it belongs to. */
+      toExpression: (span) => {
+        const b = blocks.find((b2) => span.start >= b2.fileStart && span.start <= b2.fileStart + b2.body.length);
+        if (!b) return void 0;
+        const start = b.start + (span.start - b.fileStart);
+        return { start, length: Math.min(span.length, b.end - start) };
+      }
+    };
+  };
+  return { analyze, completionsAt, virtual, globalsFor: buildGlobals };
 };
 
 // ../core/shape-from-type.ts
@@ -572,10 +626,14 @@ var init = (modules) => {
       const program = ls.getProgram();
       const sf = program?.getSourceFile(fileName);
       if (!program || !sf) return [];
-      const items = findExpressions(ts, sf, program.getTypeChecker()).map((f) => ({
-        ...f,
-        analysis: service.analyze(f.expression, f.shape, f.expected)
-      }));
+      const found = findExpressions(ts, sf, program.getTypeChecker());
+      const items = found.map((f) => {
+        const resolved = f.kind === "call" ? found.find((o) => o.kind === "resolve" && o.expression === f.expression && o.context === f.context) : void 0;
+        const analysis = service.analyze(f.expression, f.shape, f.expected);
+        const hoverShape = resolved?.shape ?? f.shape;
+        const hoverAnalysis = resolved ? service.analyze(f.expression, hoverShape) : analysis;
+        return { ...f, analysis, hoverShape, hoverAnalysis };
+      });
       cache.set(fileName, { version, items });
       syncResolved(fileName, items);
       return items;
@@ -630,23 +688,60 @@ var init = (modules) => {
     proxy.getQuickInfoAtPosition = (fileName, position) => {
       const it = itemAt(fileName, position);
       if (!it) return ls.getQuickInfoAtPosition(fileName, position);
-      const block = blockAt(it, position);
-      const lines = [
-        ...block ? [`{{ ${block.body.trim()} }}: ${block.type}`] : [],
-        `expression: ${it.analysis.type}`
-      ];
-      return {
+      const offset = position - it.textStart;
+      const v = service.virtual(it.expression, it.hoverShape);
+      const info2 = (text, span) => ({
         kind: ts.ScriptElementKind.string,
         kindModifiers: "",
-        textSpan: block ? { start: it.textStart + block.start, length: block.end - block.start } : { start: it.node.getStart(), length: it.node.getWidth() },
-        displayParts: [{ text: lines.join("\n"), kind: "text" }]
-      };
+        textSpan: span,
+        displayParts: [{ text, kind: "text" }]
+      });
+      const analysed = (b) => it.hoverAnalysis.blocks.find((a) => a.start === b.start);
+      const block = v.blockAt(offset);
+      if (block) {
+        const pos = v.toFile(offset);
+        const inner = v.languageService.getQuickInfoAtPosition(v.fileName, pos);
+        const span = inner && v.toExpression(inner.textSpan);
+        if (inner && span) return { ...inner, textSpan: { start: it.textStart + span.start, length: span.length } };
+        const a = analysed(block);
+        return info2(`{{ }} : ${a?.type ?? "unknown"}`, { start: it.textStart + block.start - 2, length: block.body.length + 4 });
+      }
+      const delimited = v.blocks.find((b) => offset >= b.start - 2 && offset < b.start || offset > b.end && offset <= b.end + 2);
+      if (delimited) {
+        const a = analysed(delimited);
+        return info2(`{{ }} : ${a?.type ?? "unknown"}`, { start: it.textStart + delimited.start - 2, length: delimited.body.length + 4 });
+      }
+      return info2(`expression : ${it.hoverAnalysis.type}`, { start: it.node.getStart(), length: it.node.getWidth() });
     };
+    const forward = (fileName, position, inner, fallback) => {
+      const it = itemAt(fileName, position);
+      if (!it) return fallback();
+      const v = service.virtual(it.expression, it.hoverShape);
+      const pos = v.toFile(position - it.textStart);
+      return pos === void 0 ? fallback() : inner(v, pos);
+    };
+    proxy.getSignatureHelpItems = (fileName, position, options) => forward(
+      fileName,
+      position,
+      (v, pos) => {
+        const help = v.languageService.getSignatureHelpItems(v.fileName, pos, options);
+        const span = help && v.toExpression(help.applicableSpan);
+        const it = itemAt(fileName, position);
+        return help && span ? { ...help, applicableSpan: { start: it.textStart + span.start, length: span.length } } : void 0;
+      },
+      () => ls.getSignatureHelpItems(fileName, position, options)
+    );
+    proxy.getCompletionEntryDetails = (fileName, position, entryName, formatOptions, source, preferences, data) => forward(
+      fileName,
+      position,
+      (v, pos) => v.languageService.getCompletionEntryDetails(v.fileName, pos, entryName, formatOptions, source, preferences, data),
+      () => ls.getCompletionEntryDetails(fileName, position, entryName, formatOptions, source, preferences, data)
+    );
     proxy.getCompletionsAtPosition = (fileName, position, options, formatting) => {
       const it = itemAt(fileName, position);
       const block = it && blockAt(it, position);
       if (!it || !block) return ls.getCompletionsAtPosition(fileName, position, options, formatting);
-      const entries = service.completionsAt(it.expression, position - it.textStart, it.shape);
+      const entries = service.completionsAt(it.expression, position - it.textStart, it.hoverShape);
       return {
         isGlobalCompletion: false,
         isMemberCompletion: true,

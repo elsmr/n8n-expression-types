@@ -7,10 +7,16 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type TS from 'typescript';
-import { createExpressionService, type Analysis } from 'n8n-expression-types/service';
+import { createExpressionService, type Analysis, type RuntimeShape } from 'n8n-expression-types/service';
 import { findExpressions, lookupEntries, renderResolved, type Found } from 'n8n-expression-types/scan';
 
-type Item = Found & { analysis: Analysis };
+type Item = Found & {
+	analysis: Analysis;
+	/** Richest shape known for this expression: from a resolve() site when one exists. */
+	hoverShape: RuntimeShape;
+	/** Analysis against hoverShape, for block result types on hover. */
+	hoverAnalysis: Analysis;
+};
 
 // A project lists the plugin in tsconfig and the VS Code extension injects it too:
 // the second create() for the same project must not decorate twice.
@@ -37,10 +43,14 @@ const init = (modules: { typescript: typeof TS }) => {
 			const program = ls.getProgram();
 			const sf = program?.getSourceFile(fileName);
 			if (!program || !sf) return [];
-			const items = findExpressions(ts, sf, program.getTypeChecker()).map((f) => ({
-				...f,
-				analysis: service.analyze(f.expression, f.shape, f.expected),
-			}));
+			const found = findExpressions(ts, sf, program.getTypeChecker());
+			const items: Item[] = found.map((f) => {
+				const resolved = f.kind === 'call' ? found.find((o) => o.kind === 'resolve' && o.expression === f.expression && o.context === f.context) : undefined;
+				const analysis = service.analyze(f.expression, f.shape, f.expected);
+				const hoverShape = resolved?.shape ?? f.shape;
+				const hoverAnalysis = resolved ? service.analyze(f.expression, hoverShape) : analysis;
+				return { ...f, analysis, hoverShape, hoverAnalysis };
+			});
 			cache.set(fileName, { version, items });
 			syncResolved(fileName, items);
 			return items;
@@ -102,29 +112,79 @@ const init = (modules: { typescript: typeof TS }) => {
 			return [...prior, ...extra];
 		};
 
+		// Hover: TypeScript's own quick info for the token under the cursor, the block's
+		// result type on the {{ }} delimiters, the expression's type on surrounding text.
 		proxy.getQuickInfoAtPosition = (fileName, position) => {
 			const it = itemAt(fileName, position);
 			if (!it) return ls.getQuickInfoAtPosition(fileName, position);
-			const block = blockAt(it, position);
-			const lines = [
-				...(block ? [`{{ ${block.body.trim()} }}: ${block.type}`] : []),
-				`expression: ${it.analysis.type}`,
-			];
-			return {
+			const offset = position - it.textStart;
+			const v = service.virtual(it.expression, it.hoverShape);
+			const info = (text: string, span: TS.TextSpan): TS.QuickInfo => ({
 				kind: ts.ScriptElementKind.string,
 				kindModifiers: '',
-				textSpan: block
-					? { start: it.textStart + block.start, length: block.end - block.start }
-					: { start: it.node.getStart(), length: it.node.getWidth() },
-				displayParts: [{ text: lines.join('\n'), kind: 'text' }],
-			};
+				textSpan: span,
+				displayParts: [{ text, kind: 'text' }],
+			});
+			const analysed = (b: { start: number }) => it.hoverAnalysis.blocks.find((a) => a.start === b.start);
+
+			const block = v.blockAt(offset);
+			if (block) {
+				const pos = v.toFile(offset)!;
+				const inner = v.languageService.getQuickInfoAtPosition(v.fileName, pos);
+				const span = inner && v.toExpression(inner.textSpan);
+				if (inner && span) return { ...inner, textSpan: { start: it.textStart + span.start, length: span.length } };
+				const a = analysed(block);
+				return info(`{{ }} : ${a?.type ?? 'unknown'}`, { start: it.textStart + block.start - 2, length: block.body.length + 4 });
+			}
+			// On the delimiters themselves: the block's result type.
+			const delimited = v.blocks.find((b) => (offset >= b.start - 2 && offset < b.start) || (offset > b.end && offset <= b.end + 2));
+			if (delimited) {
+				const a = analysed(delimited);
+				return info(`{{ }} : ${a?.type ?? 'unknown'}`, { start: it.textStart + delimited.start - 2, length: delimited.body.length + 4 });
+			}
+			return info(`expression : ${it.hoverAnalysis.type}`, { start: it.node.getStart(), length: it.node.getWidth() });
 		};
+
+		// Forwarded to the virtual file when the cursor is inside a block.
+		const forward = <R>(
+			fileName: string,
+			position: number,
+			inner: (v: ReturnType<typeof service.virtual>, pos: number) => R,
+			fallback: () => R,
+		): R => {
+			const it = itemAt(fileName, position);
+			if (!it) return fallback();
+			const v = service.virtual(it.expression, it.hoverShape);
+			const pos = v.toFile(position - it.textStart);
+			return pos === undefined ? fallback() : inner(v, pos);
+		};
+
+		proxy.getSignatureHelpItems = (fileName, position, options) =>
+			forward(
+				fileName,
+				position,
+				(v, pos) => {
+					const help = v.languageService.getSignatureHelpItems(v.fileName, pos, options);
+					const span = help && v.toExpression(help.applicableSpan);
+					const it = itemAt(fileName, position)!;
+					return help && span ? { ...help, applicableSpan: { start: it.textStart + span.start, length: span.length } } : undefined;
+				},
+				() => ls.getSignatureHelpItems(fileName, position, options),
+			);
+
+		proxy.getCompletionEntryDetails = (fileName, position, entryName, formatOptions, source, preferences, data) =>
+			forward(
+				fileName,
+				position,
+				(v, pos) => v.languageService.getCompletionEntryDetails(v.fileName, pos, entryName, formatOptions, source, preferences, data),
+				() => ls.getCompletionEntryDetails(fileName, position, entryName, formatOptions, source, preferences, data),
+			);
 
 		proxy.getCompletionsAtPosition = (fileName, position, options, formatting) => {
 			const it = itemAt(fileName, position);
 			const block = it && blockAt(it, position);
 			if (!it || !block) return ls.getCompletionsAtPosition(fileName, position, options, formatting);
-			const entries = service.completionsAt(it.expression, position - it.textStart, it.shape);
+			const entries = service.completionsAt(it.expression, position - it.textStart, it.hoverShape);
 			return {
 				isGlobalCompletion: false,
 				isMemberCompletion: true,
