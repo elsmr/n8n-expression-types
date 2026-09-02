@@ -52,6 +52,13 @@ for (const d of diags) {
 }
 const typoPos = text.indexOf('toUppercase');
 const fixes = ls.getCodeFixesAtPosition(file, typoPos, typoPos + 'toUppercase'.length, [2551], {}, {});
+const sem = ls.getEncodedSemanticClassifications(file, { start: 0, length: text.length }, ts.SemanticClassificationFormat.TwentyTwenty);
+const innerSem = inner.getEncodedSemanticClassifications(file, { start: 0, length: text.length }, ts.SemanticClassificationFormat.TwentyTwenty);
+console.log('semantic classifications added inside blocks:', (sem.spans.length - innerSem.spans.length) / 3);
+const hintsInBlocks = ls.provideInlayHints(file, { start: 0, length: text.length }, { includeInlayParameterNameHints: 'all' }).filter((h) => typeof h.text === 'string' && !h.text.startsWith(': '));
+console.log('inner inlay hints (parameter names):', hintsInBlocks.slice(0, 3).map((h) => h.text).join(', ') || '(none)');
+const varHover = ls.getQuickInfoAtPosition(file, text.indexOf('const orderId') + 'const '.length + 2);
+console.log('expr variable hover doc:', varHover?.documentation?.map((p) => p.text).join(' | '));
 console.log('quick fixes at toUppercase:', fixes.map((f) => `${f.description} -> ${JSON.stringify(f.changes[0]?.textChanges[0])}`).join('; ') || '(none)');
 
 const at = (needle: string, delta = 0) => text.indexOf(needle) + delta;

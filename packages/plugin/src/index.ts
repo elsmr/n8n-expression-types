@@ -96,6 +96,7 @@ const init = (modules: { typescript: typeof TS }) => {
 				messageText,
 				category: ts.DiagnosticCategory.Error,
 				code,
+				...(code === 90001 ? { source: 'n8n' } : {}),
 			});
 			const extra = itemsFor(fileName).flatMap((it) => {
 				// resolve() re-checks a literal declared elsewhere: report at the call.
@@ -115,9 +116,27 @@ const init = (modules: { typescript: typeof TS }) => {
 
 		// Hover: TypeScript's own quick info for the token under the cursor, the block's
 		// result type on the {{ }} delimiters, the expression's type on surrounding text.
+		// Hovering the variable an expr() is assigned to: TypeScript's Expr<...> plus what it resolves to.
+		const withResolveSummary = (fileName: string, position: number): TS.QuickInfo | undefined => {
+			const prior = ls.getQuickInfoAtPosition(fileName, position);
+			const shown = prior?.displayParts?.map((p) => p.text).join('') ?? '';
+			const m = /\b(?:Expr|InvalidExpr)<(\w+)Context, "((?:[^"\\]|\\.)*)">/.exec(shown);
+			if (!prior || !m) return prior;
+			const text = JSON.parse(`"${m[2]}"`) as string;
+			const sites = [...resolvedByFile.values()].flat().filter((i) => i.kind === 'resolve' && i.expression === text);
+			const loose = [...resolvedByFile.values()].flat().find((i) => i.kind === 'call' && i.expression === text);
+			const lines = [
+				`Definition-time type: ${loose?.analysis.type ?? 'unknown'}`,
+				...(sites.length
+					? [`Resolved at ${sites.length} site${sites.length === 1 ? '' : 's'}: ${[...new Set(sites.map((s) => s.analysis.type))].join(' | ')}`]
+					: ['Not resolved against data anywhere.']),
+			];
+			return { ...prior, documentation: [...(prior.documentation ?? []), { text: lines.join('\n'), kind: 'text' }] };
+		};
+
 		proxy.getQuickInfoAtPosition = (fileName, position) => {
 			const it = itemAt(fileName, position);
-			if (!it) return ls.getQuickInfoAtPosition(fileName, position);
+			if (!it) return withResolveSummary(fileName, position);
 			const offset = position - it.textStart;
 			const v = service.virtual(it.expression, it.hoverShape);
 			// Styled like TypeScript's own "(kind) name: type" hovers.
@@ -230,15 +249,42 @@ const init = (modules: { typescript: typeof TS }) => {
 
 		proxy.provideInlayHints = (fileName, span, preferences) => {
 			const prior = ls.provideInlayHints(fileName, span, preferences);
-			const hints: TS.InlayHint[] = itemsFor(fileName)
-				.filter((it) => !it.reportAt && it.node.getEnd() >= span.start && it.node.getEnd() <= span.start + span.length)
-				.map((it) => ({
-					text: `: ${it.analysis.type}`,
-					position: it.node.getEnd(),
-					kind: ts.InlayHintKind.Type,
-					paddingLeft: true,
-				}));
-			return [...prior, ...hints];
+			const visible = itemsFor(fileName).filter(
+				(it) => !it.reportAt && it.node.getEnd() >= span.start && it.node.getStart() <= span.start + span.length,
+			);
+			const typeHints: TS.InlayHint[] = visible.map((it) => ({
+				text: `: ${it.hoverAnalysis.type}`,
+				position: it.node.getEnd(),
+				kind: ts.InlayHintKind.Type,
+				paddingLeft: true,
+			}));
+			// Parameter-name hints and friends from inside the blocks, mapped back.
+			const inner: TS.InlayHint[] = visible.flatMap((it) => {
+				const v = service.virtual(it.expression, it.hoverShape);
+				return v.blocks.flatMap((b) =>
+					v.languageService
+						.provideInlayHints(v.fileName, { start: b.fileStart, length: b.body.length }, preferences)
+						.map((h) => ({ ...h, position: it.textStart + b.start + (h.position - b.fileStart) })),
+				);
+			});
+			return [...prior, ...typeHints, ...inner];
+		};
+
+		// Semantic highlighting for identifiers inside blocks: [start, length, classification] triples.
+		proxy.getEncodedSemanticClassifications = (fileName, span, format) => {
+			const prior = ls.getEncodedSemanticClassifications(fileName, span, format);
+			const spans = [...prior.spans];
+			for (const it of itemsFor(fileName)) {
+				if (it.reportAt || it.node.getEnd() < span.start || it.node.getStart() > span.start + span.length) continue;
+				const v = service.virtual(it.expression, it.hoverShape);
+				for (const b of v.blocks) {
+					const inner = v.languageService.getEncodedSemanticClassifications(v.fileName, { start: b.fileStart, length: b.body.length }, format);
+					for (let i = 0; i + 2 < inner.spans.length; i += 3) {
+						spans.push(it.textStart + b.start + (inner.spans[i] - b.fileStart), inner.spans[i + 1], inner.spans[i + 2]);
+					}
+				}
+			}
+			return { ...prior, spans };
 		};
 
 		log(`active for ${projectDir}`);

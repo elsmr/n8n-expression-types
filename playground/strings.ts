@@ -6,7 +6,8 @@ import { pagination, runtime } from './runtime.ts';
 
 // No shape: runtime data is loose, so anything under $json typechecks. Globals still do.
 export const loose = expr('={{ $json.whatever.you.like.toTitleCase() }}');        // Expr<NodeParameterContext, "...">
-export const badGlobal = expr('={{ $pageCount }}');                                  // InvalidExpr<NodeParameterContext, "...">: not in this context
+export const badGlobal = expr('={{ $pageCount }}');
+export const unsafe = expr('={{ $json.constructor.name + $.length }}');                // n8n sandbox: .constructor, bare $                                  // InvalidExpr<NodeParameterContext, "...">: not in this context
 export const paged = expr.httpPagination('={{ $response.body.next ?? $request.url }}'); // Expr<HttpPaginationContext, "...">
 
 // Declared without data: definition-time types, runtime holes loose.

@@ -23,6 +23,14 @@ export type BlockAnalysis = {
 	errors: Array<{ message: string; start: number; end: number; code: number }>;
 };
 
+/** n8n's own rules, enforced by the sandbox rather than by types (expression-sandboxing.ts, expression.ts). */
+export const SANDBOX_RULES: Array<{ pattern: RegExp; message: string }> = [
+	{ pattern: /\.\s*constructor\b/g, message: "Expression contains invalid constructor function call. n8n rejects any '.constructor' access." },
+	{ pattern: /\b__proto__\b|\.\s*prototype\b/g, message: 'n8n blocks prototype access in expressions.' },
+	{ pattern: /\$(?![\w$]|\s*\()/g, message: 'Cannot access "$" without calling it as a function.' },
+	{ pattern: /\bclass\b[^{]*\bextends\b/g, message: 'Cannot use dynamic class extension due to security concerns.' },
+];
+
 export type Analysis = {
 	type: string;
 	blocks: BlockAnalysis[];
@@ -131,6 +139,11 @@ export const createExpressionService = ({ ts, root }: Options) => {
 					end: toExpr(d.start! + (d.length ?? 1)),
 					code: d.code,
 				}));
+			for (const rule of SANDBOX_RULES) {
+				for (const m of b.body.matchAll(rule.pattern)) {
+					errors.push({ message: rule.message, start: b.start + m.index, end: b.start + m.index + m[0].length, code: 90001 });
+				}
+			}
 			return { body: b.body, start: b.start, end: b.end, type, errors };
 		});
 
