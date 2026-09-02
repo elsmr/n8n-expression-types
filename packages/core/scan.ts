@@ -76,7 +76,10 @@ const exprCallContext = (ts: typeof TS, callee: TS.Expression): ExpressionContex
 const literalBehind = (ts: typeof TS, checker: TS.TypeChecker, arg: TS.Expression) => {
 	if (ts.isStringLiteralLike(arg)) return { literal: arg, context: undefined };
 	if (!ts.isIdentifier(arg)) return undefined;
-	const decl = checker.getSymbolAtLocation(arg)?.valueDeclaration;
+	const symbol = checker.getSymbolAtLocation(arg);
+	// Imported names are aliases; follow them to the declaring const.
+	const target = symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+	const decl = target?.valueDeclaration;
 	if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer || !ts.isCallExpression(decl.initializer)) return undefined;
 	const init = decl.initializer;
 	const first = init.arguments[0];

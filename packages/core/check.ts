@@ -2,7 +2,8 @@
 // plugin hook, so this is how CI gets the flowing types without a generated file on disk.
 // Also prints the expression diagnostics themselves; they fail the run unless
 // --expression-errors=warn is passed (the playground shows errors on purpose).
-//   tsx check.ts path/to/tsconfig.json [--expression-errors=warn]
+//   tsx check.ts path/to/tsconfig.json [--expression-errors=warn] [--dump-lookup=path]
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { createExpressionService } from './service.ts';
@@ -10,6 +11,7 @@ import { collectResolved, renderResolved } from './scan.ts';
 
 const args = process.argv.slice(2);
 const expressionErrorsWarn = args.includes('--expression-errors=warn');
+const dumpLookup = args.find((a) => a.startsWith('--dump-lookup='))?.slice('--dump-lookup='.length);
 const configPath = path.resolve(args.find((a) => !a.startsWith('--')) ?? 'tsconfig.json');
 const parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, {
 	...ts.sys,
@@ -32,11 +34,12 @@ host.getSourceFile = (f, lang, onError, shouldCreate) =>
 
 // First program: find the expressions and type them. Second: the same program with the
 // lookup filled in; unchanged files are reused from the first.
-const first = ts.createProgram([...parsed.fileNames, LOOKUP], parsed.options, host);
+const first = ts.createProgram([LOOKUP, ...parsed.fileNames], parsed.options, host);
 const service = createExpressionService({ ts, root: import.meta.dirname });
 const { entries, reports } = collectResolved(ts, service, first);
 lookup = renderResolved(entries);
-const program = ts.createProgram([...parsed.fileNames, LOOKUP], parsed.options, host, first);
+if (dumpLookup) writeFileSync(dumpLookup, lookup);
+const program = ts.createProgram([LOOKUP, ...parsed.fileNames], parsed.options, host, first);
 
 const format = ts.formatDiagnosticsWithColorAndContext(
 	ts.getPreEmitDiagnostics(program).filter((d) => d.file?.fileName !== LOOKUP),

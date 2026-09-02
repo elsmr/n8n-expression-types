@@ -72,7 +72,7 @@ const init = (modules: { typescript: typeof TS }) => {
 		const origSnapshot = lsHost.getScriptSnapshot.bind(lsHost);
 		lsHost.getScriptFileNames = () => {
 			const names = origFileNames();
-			return names.includes(resolvedFile) ? names : [...names, resolvedFile];
+			return names.includes(resolvedFile) ? names : [resolvedFile, ...names];
 		};
 		lsHost.getScriptVersion = (f) => (f === resolvedFile ? String(resolvedVersion) : origVersion(f));
 		lsHost.getScriptSnapshot = (f) => (f === resolvedFile ? ts.ScriptSnapshot.fromString(resolvedText) : origSnapshot(f));

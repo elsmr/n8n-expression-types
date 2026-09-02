@@ -30,7 +30,8 @@ export type Cases = [
 	Expect<Equal<Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>, N8nResolveError>>,
 	Expect<Equal<Resolve<typeof badGlobal, typeof sample>, N8nInvalidExpression>>,
 	Expect<Equal<ReturnType<typeof resolve<typeof total, typeof sample>>, number>>,
-	Expect<IsAny<Resolve<typeof loose, typeof sample>>>,
+	Expect<IsAny<Resolve<typeof loose, {}>>>,                                   // no data: loose stays any
+	Expect<Equal<Resolve<typeof loose, typeof sample>, N8nResolveError>>,       // real data: $json.whatever does not exist
 	ExpectFalse<Equal<Resolve<typeof loose, typeof sample>, number>>,
 	Expect<Equal<typeof lambda, LambdaExpression<number>>>,
 	Expect<Equal<Expression<string> extends string ? true : false, true>>,

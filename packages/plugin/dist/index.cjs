@@ -535,7 +535,9 @@ var exprCallContext = (ts, callee) => {
 var literalBehind = (ts, checker, arg) => {
   if (ts.isStringLiteralLike(arg)) return { literal: arg, context: void 0 };
   if (!ts.isIdentifier(arg)) return void 0;
-  const decl = checker.getSymbolAtLocation(arg)?.valueDeclaration;
+  const symbol = checker.getSymbolAtLocation(arg);
+  const target = symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+  const decl = target?.valueDeclaration;
   if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer || !ts.isCallExpression(decl.initializer)) return void 0;
   const init2 = decl.initializer;
   const first = init2.arguments[0];
@@ -687,7 +689,7 @@ var init = (modules) => {
     const origSnapshot = lsHost.getScriptSnapshot.bind(lsHost);
     lsHost.getScriptFileNames = () => {
       const names = origFileNames();
-      return names.includes(resolvedFile) ? names : [...names, resolvedFile];
+      return names.includes(resolvedFile) ? names : [resolvedFile, ...names];
     };
     lsHost.getScriptVersion = (f) => f === resolvedFile ? String(resolvedVersion) : origVersion(f);
     lsHost.getScriptSnapshot = (f) => f === resolvedFile ? ts.ScriptSnapshot.fromString(resolvedText) : origSnapshot(f);

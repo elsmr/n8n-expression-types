@@ -1,4 +1,5 @@
 node_modules/
 packages/plugin/dist/
 playground/_bench*
+playground/n8n-resolved.d.ts
 *.vsix
