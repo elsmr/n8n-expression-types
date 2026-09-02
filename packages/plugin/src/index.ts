@@ -88,25 +88,26 @@ const init = (modules: { typescript: typeof TS }) => {
 			const prior = ls.getSemanticDiagnostics(fileName);
 			const sf = ls.getProgram()?.getSourceFile(fileName);
 			if (!sf) return prior;
-			const diag = (start: number, length: number, messageText: string): TS.Diagnostic => ({
+			// Same codes as TypeScript's own diagnostics, so they read as ts(2339) in the editor.
+			const diag = (start: number, length: number, messageText: string, code: number): TS.Diagnostic => ({
 				file: sf,
 				start,
 				length,
 				messageText,
 				category: ts.DiagnosticCategory.Error,
-				code: 90001,
-				source: 'n8n-expression',
+				code,
 			});
 			const extra = itemsFor(fileName).flatMap((it) => {
 				// resolve() re-checks a literal declared elsewhere: report at the call.
 				if (it.reportAt) {
-					const messages = it.analysis.blocks.flatMap((b) => b.errors.map((e) => e.message));
-					return messages.map((m) => diag(it.reportAt!.start, it.reportAt!.length, `Against this data: ${m}`));
+					return it.analysis.blocks.flatMap((b) =>
+						b.errors.map((e) => diag(it.reportAt!.start, it.reportAt!.length, `${e.message} (in '${it.expression}' against this data)`, e.code)),
+					);
 				}
 				const inBlocks = it.analysis.blocks.flatMap((b) =>
-					b.errors.map((e) => diag(it.textStart + e.start, Math.max(e.end - e.start, 1), e.message)),
+					b.errors.map((e) => diag(it.textStart + e.start, Math.max(e.end - e.start, 1), e.message, e.code)),
 				);
-				const slot = it.analysis.slotError ? [diag(it.node.getStart(), it.node.getWidth(), it.analysis.slotError)] : [];
+				const slot = it.analysis.slotError ? [diag(it.node.getStart(), it.node.getWidth(), it.analysis.slotError, 2322)] : [];
 				return [...inBlocks, ...slot];
 			});
 			return [...prior, ...extra];
@@ -119,11 +120,21 @@ const init = (modules: { typescript: typeof TS }) => {
 			if (!it) return ls.getQuickInfoAtPosition(fileName, position);
 			const offset = position - it.textStart;
 			const v = service.virtual(it.expression, it.hoverShape);
-			const info = (text: string, span: TS.TextSpan): TS.QuickInfo => ({
+			// Styled like TypeScript's own "(kind) name: type" hovers.
+			const info = (label: string, name: string, type: string, span: TS.TextSpan): TS.QuickInfo => ({
 				kind: ts.ScriptElementKind.string,
 				kindModifiers: '',
 				textSpan: span,
-				displayParts: [{ text, kind: 'text' }],
+				displayParts: [
+					{ text: '(', kind: 'punctuation' },
+					{ text: label, kind: 'text' },
+					{ text: ')', kind: 'punctuation' },
+					{ text: ' ', kind: 'space' },
+					{ text: name, kind: 'text' },
+					{ text: ':', kind: 'punctuation' },
+					{ text: ' ', kind: 'space' },
+					{ text: type, kind: 'keyword' },
+				],
 			});
 			const analysed = (b: { start: number }) => it.hoverAnalysis.blocks.find((a) => a.start === b.start);
 
@@ -134,15 +145,15 @@ const init = (modules: { typescript: typeof TS }) => {
 				const span = inner && v.toExpression(inner.textSpan);
 				if (inner && span) return { ...inner, textSpan: { start: it.textStart + span.start, length: span.length } };
 				const a = analysed(block);
-				return info(`{{ }} : ${a?.type ?? 'unknown'}`, { start: it.textStart + block.start - 2, length: block.body.length + 4 });
+				return info('block', `{{ ${block.body.trim()} }}`, a?.type ?? 'unknown', { start: it.textStart + block.start - 2, length: block.body.length + 4 });
 			}
 			// On the delimiters themselves: the block's result type.
 			const delimited = v.blocks.find((b) => (offset >= b.start - 2 && offset < b.start) || (offset > b.end && offset <= b.end + 2));
 			if (delimited) {
 				const a = analysed(delimited);
-				return info(`{{ }} : ${a?.type ?? 'unknown'}`, { start: it.textStart + delimited.start - 2, length: delimited.body.length + 4 });
+				return info('block', `{{ ${delimited.body.trim()} }}`, a?.type ?? 'unknown', { start: it.textStart + delimited.start - 2, length: delimited.body.length + 4 });
 			}
-			return info(`expression : ${it.hoverAnalysis.type}`, { start: it.node.getStart(), length: it.node.getWidth() });
+			return info('expression', it.context, it.hoverAnalysis.type, { start: it.node.getStart(), length: it.node.getWidth() });
 		};
 
 		// Forwarded to the virtual file when the cursor is inside a block.
@@ -179,6 +190,30 @@ const init = (modules: { typescript: typeof TS }) => {
 				(v, pos) => v.languageService.getCompletionEntryDetails(v.fileName, pos, entryName, formatOptions, source, preferences, data),
 				() => ls.getCompletionEntryDetails(fileName, position, entryName, formatOptions, source, preferences, data),
 			);
+
+		// Quick fixes ("Change spelling to 'toUpperCase'") from the virtual file, mapped back.
+		proxy.getCodeFixesAtPosition = (fileName, start, end, errorCodes, formatOptions, preferences) => {
+			const prior = ls.getCodeFixesAtPosition(fileName, start, end, errorCodes, formatOptions, preferences);
+			const it = itemAt(fileName, start);
+			if (!it || it.reportAt) return prior;
+			const v = service.virtual(it.expression, it.hoverShape);
+			const from = v.toFile(start - it.textStart);
+			const to = v.toFile(end - it.textStart);
+			if (from === undefined || to === undefined) return prior;
+			const fixes = v.languageService.getCodeFixesAtPosition(v.fileName, from, to, errorCodes, formatOptions, preferences);
+			const mapped = fixes.flatMap((fix) => {
+				const changes = fix.changes.map((c) => ({
+					fileName,
+					textChanges: c.textChanges.map((tc) => {
+						const span = v.toExpression(tc.span);
+						return span ? { ...tc, span: { start: it.textStart + span.start, length: span.length } } : undefined;
+					}),
+				}));
+				if (changes.some((c) => c.textChanges.some((tc) => tc === undefined))) return [];
+				return [{ ...fix, changes: changes.map((c) => ({ ...c, textChanges: c.textChanges.filter((tc) => tc !== undefined) })), fixAllDescription: undefined, fixId: undefined }];
+			});
+			return [...prior, ...mapped];
+		};
 
 		proxy.getCompletionsAtPosition = (fileName, position, options, formatting) => {
 			const it = itemAt(fileName, position);

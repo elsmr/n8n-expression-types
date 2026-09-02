@@ -260,7 +260,8 @@ const __expected: ${expected} = ${single ? "__r0" : "'' as string"};` : "";
       const errors = diags.filter((d) => d.start !== void 0 && d.start >= stmt.getStart(sf) && d.start <= stmt.getEnd()).map((d) => ({
         message: ts.flattenDiagnosticMessageText(d.messageText, "\n"),
         start: toExpr(d.start),
-        end: toExpr(d.start + (d.length ?? 1))
+        end: toExpr(d.start + (d.length ?? 1)),
+        code: d.code
       }));
       return { body: b.body, start: b.start, end: b.end, type: type2, errors };
     });
@@ -663,24 +664,24 @@ var init = (modules) => {
       const prior = ls.getSemanticDiagnostics(fileName);
       const sf = ls.getProgram()?.getSourceFile(fileName);
       if (!sf) return prior;
-      const diag = (start, length, messageText) => ({
+      const diag = (start, length, messageText, code) => ({
         file: sf,
         start,
         length,
         messageText,
         category: ts.DiagnosticCategory.Error,
-        code: 90001,
-        source: "n8n-expression"
+        code
       });
       const extra = itemsFor(fileName).flatMap((it) => {
         if (it.reportAt) {
-          const messages = it.analysis.blocks.flatMap((b) => b.errors.map((e) => e.message));
-          return messages.map((m) => diag(it.reportAt.start, it.reportAt.length, `Against this data: ${m}`));
+          return it.analysis.blocks.flatMap(
+            (b) => b.errors.map((e) => diag(it.reportAt.start, it.reportAt.length, `${e.message} (in '${it.expression}' against this data)`, e.code))
+          );
         }
         const inBlocks = it.analysis.blocks.flatMap(
-          (b) => b.errors.map((e) => diag(it.textStart + e.start, Math.max(e.end - e.start, 1), e.message))
+          (b) => b.errors.map((e) => diag(it.textStart + e.start, Math.max(e.end - e.start, 1), e.message, e.code))
         );
-        const slot = it.analysis.slotError ? [diag(it.node.getStart(), it.node.getWidth(), it.analysis.slotError)] : [];
+        const slot = it.analysis.slotError ? [diag(it.node.getStart(), it.node.getWidth(), it.analysis.slotError, 2322)] : [];
         return [...inBlocks, ...slot];
       });
       return [...prior, ...extra];
@@ -690,11 +691,20 @@ var init = (modules) => {
       if (!it) return ls.getQuickInfoAtPosition(fileName, position);
       const offset = position - it.textStart;
       const v = service.virtual(it.expression, it.hoverShape);
-      const info2 = (text, span) => ({
+      const info2 = (label, name, type, span) => ({
         kind: ts.ScriptElementKind.string,
         kindModifiers: "",
         textSpan: span,
-        displayParts: [{ text, kind: "text" }]
+        displayParts: [
+          { text: "(", kind: "punctuation" },
+          { text: label, kind: "text" },
+          { text: ")", kind: "punctuation" },
+          { text: " ", kind: "space" },
+          { text: name, kind: "text" },
+          { text: ":", kind: "punctuation" },
+          { text: " ", kind: "space" },
+          { text: type, kind: "keyword" }
+        ]
       });
       const analysed = (b) => it.hoverAnalysis.blocks.find((a) => a.start === b.start);
       const block = v.blockAt(offset);
@@ -704,14 +714,14 @@ var init = (modules) => {
         const span = inner && v.toExpression(inner.textSpan);
         if (inner && span) return { ...inner, textSpan: { start: it.textStart + span.start, length: span.length } };
         const a = analysed(block);
-        return info2(`{{ }} : ${a?.type ?? "unknown"}`, { start: it.textStart + block.start - 2, length: block.body.length + 4 });
+        return info2("block", `{{ ${block.body.trim()} }}`, a?.type ?? "unknown", { start: it.textStart + block.start - 2, length: block.body.length + 4 });
       }
       const delimited = v.blocks.find((b) => offset >= b.start - 2 && offset < b.start || offset > b.end && offset <= b.end + 2);
       if (delimited) {
         const a = analysed(delimited);
-        return info2(`{{ }} : ${a?.type ?? "unknown"}`, { start: it.textStart + delimited.start - 2, length: delimited.body.length + 4 });
+        return info2("block", `{{ ${delimited.body.trim()} }}`, a?.type ?? "unknown", { start: it.textStart + delimited.start - 2, length: delimited.body.length + 4 });
       }
-      return info2(`expression : ${it.hoverAnalysis.type}`, { start: it.node.getStart(), length: it.node.getWidth() });
+      return info2("expression", it.context, it.hoverAnalysis.type, { start: it.node.getStart(), length: it.node.getWidth() });
     };
     const forward = (fileName, position, inner, fallback) => {
       const it = itemAt(fileName, position);
@@ -737,6 +747,28 @@ var init = (modules) => {
       (v, pos) => v.languageService.getCompletionEntryDetails(v.fileName, pos, entryName, formatOptions, source, preferences, data),
       () => ls.getCompletionEntryDetails(fileName, position, entryName, formatOptions, source, preferences, data)
     );
+    proxy.getCodeFixesAtPosition = (fileName, start, end, errorCodes, formatOptions, preferences) => {
+      const prior = ls.getCodeFixesAtPosition(fileName, start, end, errorCodes, formatOptions, preferences);
+      const it = itemAt(fileName, start);
+      if (!it || it.reportAt) return prior;
+      const v = service.virtual(it.expression, it.hoverShape);
+      const from = v.toFile(start - it.textStart);
+      const to = v.toFile(end - it.textStart);
+      if (from === void 0 || to === void 0) return prior;
+      const fixes = v.languageService.getCodeFixesAtPosition(v.fileName, from, to, errorCodes, formatOptions, preferences);
+      const mapped = fixes.flatMap((fix) => {
+        const changes = fix.changes.map((c) => ({
+          fileName,
+          textChanges: c.textChanges.map((tc) => {
+            const span = v.toExpression(tc.span);
+            return span ? { ...tc, span: { start: it.textStart + span.start, length: span.length } } : void 0;
+          })
+        }));
+        if (changes.some((c) => c.textChanges.some((tc) => tc === void 0))) return [];
+        return [{ ...fix, changes: changes.map((c) => ({ ...c, textChanges: c.textChanges.filter((tc) => tc !== void 0) })), fixAllDescription: void 0, fixId: void 0 }];
+      });
+      return [...prior, ...mapped];
+    };
     proxy.getCompletionsAtPosition = (fileName, position, options, formatting) => {
       const it = itemAt(fileName, position);
       const block = it && blockAt(it, position);

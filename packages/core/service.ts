@@ -20,7 +20,7 @@ export type BlockAnalysis = {
 	start: number;
 	end: number;
 	type: string;
-	errors: Array<{ message: string; start: number; end: number }>;
+	errors: Array<{ message: string; start: number; end: number; code: number }>;
 };
 
 export type Analysis = {
@@ -129,6 +129,7 @@ export const createExpressionService = ({ ts, root }: Options) => {
 					message: ts.flattenDiagnosticMessageText(d.messageText, '\n'),
 					start: toExpr(d.start!),
 					end: toExpr(d.start! + (d.length ?? 1)),
+					code: d.code,
 				}));
 			return { body: b.body, start: b.start, end: b.end, type, errors };
 		});

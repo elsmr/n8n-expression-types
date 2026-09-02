@@ -43,12 +43,16 @@ const ls = init({ typescript: ts }).create({
 
 const file = path.join(projectDir, 'strings.ts');
 const text = files.get(file)!;
-const diags = ls.getSemanticDiagnostics(file).filter((d) => d.source === 'n8n-expression');
+const own = new Set(inner.getSemanticDiagnostics(file).map((d) => `${d.start}:${d.code}`));
+const diags = ls.getSemanticDiagnostics(file).filter((d) => !own.has(`${d.start}:${d.code}`));
 console.log('diagnostics:');
 for (const d of diags) {
 	const { line } = ts.getLineAndCharacterOfPosition(ls.getProgram()!.getSourceFile(file)!, d.start!);
-	console.log(`  L${line + 1}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+	console.log(`  L${line + 1} ts(${d.code}): ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
 }
+const typoPos = text.indexOf('toUppercase');
+const fixes = ls.getCodeFixesAtPosition(file, typoPos, typoPos + 'toUppercase'.length, [2551], {}, {});
+console.log('quick fixes at toUppercase:', fixes.map((f) => `${f.description} -> ${JSON.stringify(f.changes[0]?.textChanges[0])}`).join('; ') || '(none)');
 
 const at = (needle: string, delta = 0) => text.indexOf(needle) + delta;
 console.log('  (type-only Resolve<> diagnostics appear above at their line)');
@@ -68,6 +72,11 @@ const doc = ls.getQuickInfoAtPosition(file, at('$json.test.toTitleCase()', '$jso
 console.log('  .toTitleCase documentation:', doc?.slice(0, 120));
 const descFile = path.join(projectDir, 'node-description.ts');
 const dt = files.get(descFile)!;
+const ownDesc = new Set(inner.getSemanticDiagnostics(descFile).map((d) => `${d.start}:${d.code}`));
+for (const d of ls.getSemanticDiagnostics(descFile).filter((d) => !ownDesc.has(`${d.start}:${d.code}`))) {
+	const { line } = ts.getLineAndCharacterOfPosition(ls.getProgram()!.getSourceFile(descFile)!, d.start!);
+	console.log(`  node-description L${line + 1} ts(${d.code}): ${ts.flattenDiagnosticMessageText(d.messageText, ' ').slice(0, 90)}`);
+}
 const sig = ls.getSignatureHelpItems(descFile, dt.indexOf('$now.minus(') + '$now.minus('.length, undefined);
 console.log('  signature help at $now.minus(:', sig?.items[0] ? sig.items[0].prefixDisplayParts.concat(sig.items[0].parameters.flatMap((p) => p.displayParts)).map((p) => p.text).join('').slice(0, 80) : '(none)');
 
@@ -77,9 +86,9 @@ console.log('\ncompletions after $json.user.:', completions?.entries.map((e) => 
 const desc = path.join(projectDir, 'node-description.ts');
 const descText = files.get(desc)!;
 console.log('\nnode-description.ts (branded slots):');
-for (const d of ls.getSemanticDiagnostics(desc).filter((d) => d.source === 'n8n-expression')) {
+for (const d of ls.getSemanticDiagnostics(desc).filter((d) => !new Set(inner.getSemanticDiagnostics(desc).map((x) => `${x.start}:${x.code}`)).has(`${d.start}:${d.code}`))) {
 	const { line } = ts.getLineAndCharacterOfPosition(ls.getProgram()!.getSourceFile(desc)!, d.start!);
-	console.log(`  L${line + 1}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+	console.log(`  L${line + 1} ts(${d.code}): ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
 }
 const h2 = ls.getQuickInfoAtPosition(desc, descText.indexOf('$parameter.operation +') + 3);
 const h3 = ls.getQuickInfoAtPosition(desc, descText.indexOf('$value.trim') + 2);
