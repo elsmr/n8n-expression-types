@@ -8,13 +8,7 @@
     "rewriteRelativeImportExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": [
-      "node"
-    ]
+    "types": ["node"]
   },
-  "include": [
-    "*.ts",
-    "plugin/src/*.ts",
-    "plugin/smoke.ts"
-  ]
+  "include": ["*.ts"]
 }

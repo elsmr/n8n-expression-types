@@ -23,7 +23,12 @@ export type BlockAnalysis = {
 	errors: Array<{ message: string; start: number; end: number }>;
 };
 
-export type Analysis = { type: string; blocks: BlockAnalysis[] };
+export type Analysis = {
+	type: string;
+	blocks: BlockAnalysis[];
+	/** Set when `expected` was given and the expression's type is not assignable to it. */
+	slotError?: string;
+};
 
 type Block = { body: string; start: number; end: number; fileStart: number };
 
@@ -90,15 +95,18 @@ export const createExpressionService = ({ ts, root }: Options) => {
 
 	const service = ts.createLanguageService(host, ts.createDocumentRegistry());
 
-	const load = (expression: string, shape: RuntimeShape) => {
+	// `expected` adds a final assignment so the checker reports slot mismatches.
+	const load = (expression: string, shape: RuntimeShape, expected?: string) => {
 		set(GLOBALS_FILE, buildGlobals(shape));
 		const compiled = compile(expression);
-		set(EXPR_FILE, compiled.source);
+		const single = !compiled.hasText && compiled.blocks.length === 1;
+		const check = expected ? `\nconst __expected: ${expected} = ${single ? '__r0' : "'' as string"};` : '';
+		set(EXPR_FILE, compiled.source + check);
 		return compiled;
 	};
 
-	const analyze = (expression: string, shape: RuntimeShape): Analysis => {
-		const { blocks, hasText } = load(expression, shape);
+	const analyze = (expression: string, shape: RuntimeShape, expected?: string): Analysis => {
+		const { blocks, hasText } = load(expression, shape, expected);
 		if (blocks.length === 0) return { type: JSON.stringify(expression), blocks: [] };
 
 		const program = service.getProgram()!;
@@ -126,7 +134,13 @@ export const createExpressionService = ({ ts, root }: Options) => {
 		});
 
 		const type = !hasText && typed.length === 1 ? typed[0].type : 'string';
-		return { type, blocks: typed };
+		const checkStmt = expected ? sf.statements[blocks.length] : undefined;
+		const slotError = checkStmt
+			? diags
+					.filter((d) => d.start !== undefined && d.start >= checkStmt.getStart(sf) && d.start <= checkStmt.getEnd())
+					.map(() => `Expression yields ${type}, slot expects ${expected}.`)[0]
+			: undefined;
+		return { type, blocks: typed, ...(slotError ? { slotError } : {}) };
 	};
 
 	/** `offset` is a cursor position inside `expression`. */

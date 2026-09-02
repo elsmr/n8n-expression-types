@@ -68,6 +68,26 @@ declare global {
 	}
 	type N8nFromAIType = 'string' | 'number' | 'boolean' | 'json';
 
+	/** A runtime value with no known shape: JSON-legal, unchecked. */
+	type N8nLooseJson = any;
+
+	interface N8nHttpResponse<Body> {
+		body: Body;
+		headers: Record<string, any>;
+		statusCode: number;
+		statusMessage?: string;
+	}
+	interface N8nHttpRequest<Body> {
+		url: string;
+		baseURL?: string;
+		method?: 'DELETE' | 'GET' | 'HEAD' | 'PATCH' | 'POST' | 'PUT';
+		headers?: Record<string, any>;
+		qs?: Record<string, any>;
+		body?: Body;
+		json?: boolean;
+		[key: string]: any;
+	}
+
 	/** The type of an expression the checker rejected. Assigning it anywhere fails. */
 	interface N8nInvalidExpression<Message extends string> {
 		readonly __n8nInvalidExpression: Message;

@@ -1,26 +1,21 @@
 {
-  "name": "n8n-expression-types",
+  "name": "n8n-expression-types-monorepo",
   "private": true,
   "type": "module",
   "scripts": {
-    "demo": "tsx demo.ts",
-    "typecheck": "tsc --noEmit && tsc -p playground",
-    "gen-extensions": "tsx gen-extensions.ts",
-    "gen-resolved": "tsx gen-resolved.ts playground/tsconfig.json",
-    "build:plugin": "pnpm --dir plugin build",
-    "smoke": "pnpm build:plugin && tsx plugin/smoke.ts",
-    "prepare": "pnpm build:plugin"
+    "build:plugin": "pnpm --filter n8n-expression-ts-plugin build",
+    "prepare": "pnpm build:plugin",
+    "demo": "pnpm --filter n8n-expression-types demo",
+    "drift": "pnpm --filter n8n-expression-types drift",
+    "gen-extensions": "pnpm --filter n8n-expression-types gen-extensions",
+    "gen-resolved": "tsx packages/core/gen-resolved.ts playground/tsconfig.json",
+    "smoke": "pnpm build:plugin && tsx packages/plugin/smoke.ts",
+    "typecheck": "tsc -p packages/core && tsc -p packages/plugin && pnpm gen-resolved && tsc -p playground"
   },
   "devDependencies": {
-    "@types/luxon": "^3.7.5",
-    "@types/node": "^26.4.0",
+    "@types/node": "^24.0.0",
     "esbuild": "^0.28.2",
-    "n8n-workflow": "^2.16.0",
     "tsx": "^4.23.13",
-    "typescript": "^6.0.3",
-    "n8n-expression-ts-plugin": "workspace:*"
-  },
-  "dependencies": {
-    "luxon": "^3.7.2"
+    "typescript": "^6.0.3"
   }
 }

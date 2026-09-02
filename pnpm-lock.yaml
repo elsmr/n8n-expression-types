@@ -7,26 +7,13 @@ settings:
 importers:
 
   .:
-    dependencies:
-      luxon:
-        specifier: ^3.7.2
-        version: 3.7.2
     devDependencies:
-      '@types/luxon':
-        specifier: ^3.7.5
-        version: 3.7.5
       '@types/node':
-        specifier: ^26.4.0
-        version: 26.4.0
+        specifier: ^24.0.0
+        version: 24.13.3
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
-      n8n-expression-ts-plugin:
-        specifier: workspace:*
-        version: link:plugin
-      n8n-workflow:
-        specifier: ^2.16.0
-        version: 2.16.0
       tsx:
         specifier: ^4.23.13
         version: 4.23.13
@@ -34,13 +21,40 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
-  plugin: {}
+  packages/core:
+    dependencies:
+      '@types/luxon':
+        specifier: ^3.7.5
+        version: 3.7.5
+      luxon:
+        specifier: ^3.7.2
+        version: 3.7.2
+    devDependencies:
+      n8n-workflow:
+        specifier: ^2.16.0
+        version: 2.16.0
 
-  vscode:
+  packages/plugin:
+    dependencies:
+      n8n-expression-types:
+        specifier: workspace:*
+        version: link:../core
+
+  packages/vscode:
     dependencies:
       n8n-expression-ts-plugin:
         specifier: workspace:*
         version: link:../plugin
+
+  playground:
+    dependencies:
+      n8n-expression-types:
+        specifier: workspace:*
+        version: link:../packages/core
+    devDependencies:
+      n8n-expression-ts-plugin:
+        specifier: workspace:*
+        version: link:../packages/plugin
 
 packages:
 
@@ -216,8 +230,8 @@ packages:
   '@types/luxon@3.7.5':
     resolution: {integrity: sha512-jJ41Q4z6ZVO260MNDdHfW7+7a5iMiX8Mr6ZJHcmgrvhZha6dz5704o/lF2kKl6URjH6ivEL97w9xS/MgpJEphg==}
 
-  '@types/node@26.4.0':
-    resolution: {integrity: sha512-faiGnoIrLH/V8cibOMEAZ8pMw6oXqSukl29ra4mN8GdaB2ZewzeaLj+INpV5N+Z1eKWzY+IzaIZH2EIR6YZRNQ==}
+  '@types/node@24.13.3':
+    resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -540,8 +554,8 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
-  undici-types@8.3.0:
-    resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
+  undici-types@7.18.2:
+    resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
   util@0.12.5:
     resolution: {integrity: sha512-kZf/K6hEIrWHI6XqOFUiiMa+79wE/D8Q+NCNAWclkyg3b4d2k7s0QGepNjiABc+aR3N1PAyHL7p6UcLY6LmrnA==}
@@ -691,9 +705,9 @@ snapshots:
 
   '@types/luxon@3.7.5': {}
 
-  '@types/node@26.4.0':
+  '@types/node@24.13.3':
     dependencies:
-      undici-types: 8.3.0
+      undici-types: 7.18.2
 
   ansi-regex@5.0.1: {}
 
@@ -1058,7 +1072,7 @@ snapshots:
 
   typescript@6.0.3: {}
 
-  undici-types@8.3.0: {}
+  undici-types@7.18.2: {}
 
   util@0.12.5:
     dependencies:

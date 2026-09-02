@@ -1,5 +1,6 @@
 import type { RuntimeTypes } from './globals.ts';
 
+
 export const runtime = {
 	input: {
 		json: { test: 'hello', n: 3, tags: ['a', 'b'], user: { name: 'Ada', emails: ['ada@example.com'] }, nothing: null },
@@ -15,3 +16,4 @@ export const runtime = {
 	parameters: { url: 'https://example.com', options: { timeout: 3000 } },
 	vars: ['apiKey', 'region'],
 } as const satisfies RuntimeTypes;
+

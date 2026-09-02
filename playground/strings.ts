@@ -1,34 +1,27 @@
-// String form. Types come from n8n-resolved.d.ts, written by the plugin while you
-// type (or by `pnpm gen-resolved`). Hover the `=` strings for block types.
-import { resolve } from '../resolve.ts';
-import { runtime } from './runtime.ts';
+// String form. expr() marks the literal and names the context; the plugin (or
+// `pnpm gen-resolved`) writes n8n-resolved.d.ts so the types flow through the checker.
+import { expr, resolve } from 'n8n-expression-types';
+import { pagination, runtime } from './runtime.ts';
 
-const orderId = resolve("={{ $('Webhook').item.json.body.orderId }}", runtime);
-const subject = resolve('=Order {{ $json.n }} for {{ $json.user.name }}', runtime);
-const total = resolve('={{ $input.all().map((i) => i.json.n).sum() }}', runtime);
-const nextMonth = resolve('={{ $now.plus({ days: 1 }).beginningOf("month").format("yyyy-MM") }}', runtime);
-const flag = resolve('={{ $if($json.n > 1, $json.test, $json.n) }}', runtime);
-const fileName = resolve("={{ $('Edit Fields').first().binary.invoice.fileName }}", runtime);
+// No shape: runtime data is loose, so anything under $json typechecks. Globals still do.
+export const loose = expr('={{ $json.whatever.you.like.toTitleCase() }}');        // any
+export const badGlobal = expr('={{ $pageCount }}');                                  // error: not in nodeParameter
+export const paged = expr.httpPagination('={{ $response.body.next ?? $request.url }}'); // string, body loose
 
-// invalid: the resolved type is N8nInvalidExpression<...>, so using it fails
-const typo = resolve('={{ $json.test.toUppercase() }}', runtime);
-const nullable = resolve('={{ $json.nothing.x }}', runtime);
-const unknownVar = resolve('={{ $vars.nope }}', runtime);
+// With a runtime: strict against the sample's shape.
+export const orderId = expr("={{ $('Webhook').item.json.body.orderId }}", runtime);          // number
+export const subject = expr('=Order {{ $json.n }} for {{ $json.user.name }}', runtime);      // string
+export const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}', runtime);        // number
+export const nextUrl = expr.httpPagination('={{ $response.body.next }}', pagination);        // string
+export const typo = expr('={{ $json.test.toUppercase() }}', runtime);                        // N8nInvalidExpression<...>
+export const nullable = expr('={{ $json.nothing.x }}', runtime);                              // N8nInvalidExpression<...>
 
-export const check: [number, string, number, string, string | number, string | undefined] = [
-	orderId,
-	subject,
-	total,
-	nextMonth,
-	flag,
-	fileName,
-];
-// @ts-expect-error invalid expression
-export const broken: string = typo;
-// @ts-expect-error invalid expression
-export const broken2: unknown[] = [nullable.x];
-// @ts-expect-error invalid expression
-export const broken3: string = unknownVar;
-
-// Plain literals outside resolve() are analysed against runtime.json by the plugin only.
-export const plain = "=Hi {{ $json.user.name }}, {{ $json.test.toTitleCase() }}";
+// Evaluation: the plugin re-checks the expression against the data passed here.
+export const check = () => {
+	const a: number = resolve(orderId, runtime);
+	const b: string = resolve(nextUrl, pagination);
+	const c = resolve(nextUrl, { ...pagination, response: { items: [] } });   // plugin: 'next' does not exist on body
+	// @ts-expect-error invalid expression cannot be used
+	const d: string = resolve(typo, runtime);
+	return [a, b, c, d];
+};

@@ -7,8 +7,7 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": [],
-    "plugins": [{ "name": "n8n-expression-ts-plugin" }]
+    "types": ["node"]
   },
-  "include": ["*.ts"]
+  "include": ["src/*.ts", "smoke.ts"]
 }

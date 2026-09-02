@@ -1,0 +1,28 @@
+{
+  "name": "n8n-expression-types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./context": "./context.ts",
+    "./service": "./service.ts",
+    "./scan": "./scan.ts",
+    "./globals": "./globals.ts",
+    "./shapes.d.ts": "./shapes.d.ts",
+    "./extensions.d.ts": "./extensions.d.ts"
+  },
+  "scripts": {
+    "demo": "tsx demo.ts",
+    "gen-extensions": "tsx gen-extensions.ts",
+    "drift": "tsx drift.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@types/luxon": "^3.7.5",
+    "luxon": "^3.7.2"
+  },
+  "devDependencies": {
+    "n8n-workflow": "^2.16.0"
+  }
+}

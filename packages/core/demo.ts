@@ -1,14 +1,14 @@
 import ts from 'typescript';
 import { createExpressionService } from './service.ts';
 import { runtime } from './example-runtime.ts';
-import { shapeFromValues } from './globals.ts';
+import { shapeFromValues, emptyShape } from './globals.ts';
 
 const shape = shapeFromValues(runtime);
 
 const { analyze, completionsAt, globalsFor } = createExpressionService({ ts, root: import.meta.dirname });
 
-const show = (expression: string) => {
-	const a = analyze(expression, shape);
+const show = (expression: string, s = shape) => {
+	const a = analyze(expression, s);
 	console.log(`\n${expression}\n  => ${a.type}`);
 	for (const b of a.blocks) {
 		const errors = b.errors.map((e) => `\n    ! ${e.message}`).join('');
@@ -50,6 +50,13 @@ show('=Order {{ $("Webhook").item.json.body.orderId }} for {{ $json.user.name }}
 show('={{ $json.test.toUppercase() }}');
 show('={{ $json.nothing.x }}');
 show('={{ $execution.mode === "prod" }}');
+
+console.log('\n--- contexts ---');
+show("={{ $credentials.baseUrl + '/' + $value }}", emptyShape('routing'));
+show('={{ $response.body.next ?? $request.url }}', emptyShape('httpPagination'));
+show('={{ $pageCount }}', emptyShape('nodeParameter'));
+show('={{ $json.anything.goes().here }}', emptyShape('nodeParameter'));
+show('={{ $json.id }}', emptyShape('credential'));
 
 console.log('\n--- completions ---');
 complete('={{ $json.test.| }}');

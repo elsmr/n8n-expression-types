@@ -23,12 +23,13 @@ type Widen<T> = T extends string
 						: T;
 
 type Literals<K> = K extends readonly (infer S extends string)[] ? ([S] extends [never] ? string : S) : string;
-type BinaryKeys<N extends NodeRuntime> = Literals<N['binaryKeys']>;
+type BinaryKeys<N> = N extends NodeRuntime ? Literals<N['binaryKeys']> : string;
 type ParamsOf<P> = P extends Json ? Widen<P> : Record<string, any>;
 type NodeData<N> = N extends NodeRuntime
 	? N8nNodeData<Widen<N['json']>, BinaryKeys<N>, ParamsOf<N['params']>>
 	: N8nAnyNodeData;
 type Nodes<R extends RuntimeTypes> = R['nodes'] extends Record<string, NodeRuntime> ? R['nodes'] : {};
+type InputOf<R extends RuntimeTypes> = R['input'] extends NodeRuntime ? R['input'] : { json: N8nLooseJson };
 type Vars<K> = K extends readonly (infer S extends string)[]
 	? [S] extends [never]
 		? Record<string, string>
@@ -36,12 +37,12 @@ type Vars<K> = K extends readonly (infer S extends string)[]
 	: Record<string, string>;
 
 export type ExpressionContext<R extends RuntimeTypes> = {
-	$json: Widen<R['input']['json']>;
+	$json: Widen<InputOf<R>['json']>;
 	/** @deprecated use $json */
-	$data: Widen<R['input']['json']>;
-	$binary: Record<BinaryKeys<R['input']>, N8nBinaryData>;
-	$input: N8nInput<Widen<R['input']['json']>, BinaryKeys<R['input']>, ParamsOf<R['parameters']>>;
-	$thisItem: N8nItem<Widen<R['input']['json']>, BinaryKeys<R['input']>>;
+	$data: Widen<InputOf<R>['json']>;
+	$binary: Record<BinaryKeys<InputOf<R>>, N8nBinaryData>;
+	$input: N8nInput<Widen<InputOf<R>['json']>, BinaryKeys<InputOf<R>>, ParamsOf<R['parameters']>>;
+	$thisItem: N8nItem<Widen<InputOf<R>['json']>, BinaryKeys<InputOf<R>>>;
 	$: (<K extends keyof Nodes<R>>(nodeName: K, resolveFullItem?: boolean) => NodeData<Nodes<R>[K]>) &
 		((nodeName?: string, resolveFullItem?: boolean) => N8nAnyNodeData);
 	/** @deprecated use $('Node') */

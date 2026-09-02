@@ -1,6 +1,6 @@
 packages:
-  - plugin
-  - vscode
+  - packages/*
+  - playground
 onlyBuiltDependencies:
   - esbuild
 ignoredBuiltDependencies:

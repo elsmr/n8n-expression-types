@@ -5,7 +5,7 @@
       "name": "Extension: playground",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/vscode", "${workspaceFolder}/playground"],
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/vscode", "${workspaceFolder}/playground"],
       "preLaunchTask": "build plugin"
     }
   ]

@@ -7,7 +7,7 @@ const init = createRequire(import.meta.url)('./entry.cjs') as (m: { typescript: 
 	create(info: unknown): ts.LanguageService;
 };
 
-const projectDir = path.resolve(import.meta.dirname, '../playground');
+const projectDir = path.resolve(import.meta.dirname, '../../playground');
 const configPath = path.join(projectDir, 'tsconfig.json');
 const parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, {
 	...ts.sys,
@@ -57,9 +57,19 @@ console.log('\nhover on orderId:', hover?.displayParts?.map((p) => p.text).join(
 const completions = ls.getCompletionsAtPosition(file, at('$json.user.name', '$json.user.'.length), undefined);
 console.log('\ncompletions after $json.user.:', completions?.entries.map((e) => e.name).join(', '));
 
-const plain = at("$json.test.toTitleCase()", '$json.test.'.length);
-const c2 = ls.getCompletionsAtPosition(file, plain, undefined);
-console.log('completions after $json.test. (plain literal, runtime.json):', c2?.entries.slice(0, 8).map((e) => e.name).join(', '), '...');
+const desc = path.join(projectDir, 'node-description.ts');
+const descText = files.get(desc)!;
+console.log('\nnode-description.ts (branded slots):');
+for (const d of ls.getSemanticDiagnostics(desc).filter((d) => d.source === 'n8n-expression')) {
+	const { line } = ts.getLineAndCharacterOfPosition(ls.getProgram()!.getSourceFile(desc)!, d.start!);
+	console.log(`  L${line + 1}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+}
+const h2 = ls.getQuickInfoAtPosition(desc, descText.indexOf('$parameter.operation +') + 3);
+const h3 = ls.getQuickInfoAtPosition(desc, descText.indexOf('$value.trim') + 2);
+console.log('  hover $value:', h3?.displayParts?.map((p) => p.text).join('').split('\n')[0]);
+console.log('  hover $parameter:', h2?.displayParts?.map((p) => p.text).join('').split('\n')[0]);
+const c3 = ls.getCompletionsAtPosition(desc, descText.indexOf('$value.trim') + '$value.'.length, undefined);
+console.log('  completions after $value. :', c3?.entries.slice(0, 6).map((e) => e.name).join(', '), '...');
 
 const hints = ls.provideInlayHints(file, { start: 0, length: text.length }, {});
 console.log('\ninlay hints:');

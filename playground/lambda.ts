@@ -1,5 +1,5 @@
 // Lambda form. No generator involved: the checker types the body directly.
-import { expression } from '../context.ts';
+import { expression } from 'n8n-expression-types/context';
 import { runtime } from './runtime.ts';
 
 export const orderId = expression(({ $ }) => $('Webhook').item.json.body.orderId, runtime);

@@ -2,18 +2,16 @@
 //   - diagnostics, hover, completions and inlay hints inside `=...{{ }}` strings
 //   - keeps <project>/n8n-resolved.d.ts in sync with resolve() calls, so the
 //     resolved types flow through the checker while you type
-// Runtime shapes: the second argument of resolve(), else <project>/runtime.json.
+// Shapes: the runtime/data argument when present, else what the surrounding code declares.
 
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type TS from 'typescript';
-import { shapeFromValues, type RuntimeShape, type RuntimeTypes } from '../../globals.ts';
-import { createExpressionService, type Analysis } from '../../service.ts';
-import { findExpressions, renderResolved, resolvedType, type Found } from '../../scan.ts';
+import { createExpressionService, type Analysis } from 'n8n-expression-types/service';
+import { findExpressions, renderResolved, resolvedType, type Found } from 'n8n-expression-types/scan';
+import { resolvedKey } from 'n8n-expression-types';
 
 type Item = Found & { analysis: Analysis };
-
-const EMPTY: RuntimeTypes = { input: { json: {} } };
 
 // A project lists the plugin in tsconfig and the VS Code extension injects it too:
 // the second create() for the same project must not decorate twice.
@@ -27,47 +25,29 @@ const init = (modules: { typescript: typeof TS }) => {
 		decorated.add(info.project);
 		const ls = info.languageService;
 		const log = (m: string) => info.project.projectService.logger.info(`[n8n-expression] ${m}`);
-		const root = path.resolve(__dirname, '../..');
+		const root = path.resolve(__dirname, '../../core');
 		const projectDir = info.project.getCurrentDirectory();
 		const service = createExpressionService({ ts, root });
-
-		// ----- default shape from runtime.json, re-read when it changes -----
-		const runtimePath = path.join(projectDir, 'runtime.json');
-		let runtimeCache: { mtime: number; shape: RuntimeShape } | undefined;
-		const defaultShape = (): RuntimeShape => {
-			if (!existsSync(runtimePath)) return shapeFromValues(EMPTY);
-			const mtime = statSync(runtimePath).mtimeMs;
-			if (runtimeCache?.mtime !== mtime) {
-				try {
-					runtimeCache = { mtime, shape: shapeFromValues(JSON.parse(readFileSync(runtimePath, 'utf8'))) };
-				} catch (e) {
-					log(`runtime.json: ${String(e)}`);
-					runtimeCache = { mtime, shape: shapeFromValues(EMPTY) };
-				}
-			}
-			return runtimeCache.shape;
-		};
 
 		// ----- per-file analysis, cached by script version -----
 		const cache = new Map<string, { version: string; items: Item[] }>();
 		const itemsFor = (fileName: string): Item[] => {
-			const version = `${info.languageServiceHost.getScriptVersion(fileName)}:${runtimeCache?.mtime ?? 0}`;
+			const version = info.languageServiceHost.getScriptVersion(fileName);
 			const hit = cache.get(fileName);
 			if (hit?.version === version) return hit.items;
 			const program = ls.getProgram();
 			const sf = program?.getSourceFile(fileName);
 			if (!program || !sf) return [];
-			const shape = defaultShape();
-			const items = findExpressions(ts, sf, program.getTypeChecker(), shape).map((f) => ({
+			const items = findExpressions(ts, sf, program.getTypeChecker()).map((f) => ({
 				...f,
-				analysis: service.analyze(f.expression, f.shape),
+				analysis: service.analyze(f.expression, f.shape, f.expected),
 			}));
 			cache.set(fileName, { version, items });
 			syncResolved(fileName, items);
 			return items;
 		};
 		const itemAt = (fileName: string, position: number) =>
-			itemsFor(fileName).find((it) => position >= it.textStart && position <= it.textStart + it.expression.length);
+			itemsFor(fileName).find((it) => !it.reportAt && position >= it.textStart && position <= it.textStart + it.expression.length);
 		const blockAt = (it: Item, position: number) =>
 			it.analysis.blocks.find((b) => position >= it.textStart + b.start && position <= it.textStart + b.end);
 
@@ -75,7 +55,9 @@ const init = (modules: { typescript: typeof TS }) => {
 		const resolvedByFile = new Map<string, Map<string, string>>();
 		const resolvedPath = path.join(projectDir, 'n8n-resolved.d.ts');
 		const syncResolved = (fileName: string, items: Item[]) => {
-			const mine = new Map(items.filter((i) => i.resolveCall).map((i) => [i.expression, resolvedType(i.analysis)] as const));
+			const mine = new Map(
+				items.filter((i) => i.kind === 'call').map((i) => [resolvedKey(i.context, i.expression), resolvedType(i.analysis)] as const),
+			);
 			if (mine.size === 0 && !resolvedByFile.has(fileName)) return;
 			resolvedByFile.set(fileName, mine);
 			const all = new Map<string, string>();
@@ -99,19 +81,27 @@ const init = (modules: { typescript: typeof TS }) => {
 			const prior = ls.getSemanticDiagnostics(fileName);
 			const sf = ls.getProgram()?.getSourceFile(fileName);
 			if (!sf) return prior;
-			const extra: TS.Diagnostic[] = itemsFor(fileName).flatMap((it) =>
-				it.analysis.blocks.flatMap((b) =>
-					b.errors.map((e) => ({
-						file: sf,
-						start: it.textStart + e.start,
-						length: Math.max(e.end - e.start, 1),
-						messageText: e.message,
-						category: ts.DiagnosticCategory.Error,
-						code: 90001,
-						source: 'n8n-expression',
-					})),
-				),
-			);
+			const diag = (start: number, length: number, messageText: string): TS.Diagnostic => ({
+				file: sf,
+				start,
+				length,
+				messageText,
+				category: ts.DiagnosticCategory.Error,
+				code: 90001,
+				source: 'n8n-expression',
+			});
+			const extra = itemsFor(fileName).flatMap((it) => {
+				// resolve() re-checks a literal declared elsewhere: report at the call.
+				if (it.reportAt) {
+					const messages = it.analysis.blocks.flatMap((b) => b.errors.map((e) => e.message));
+					return messages.map((m) => diag(it.reportAt!.start, it.reportAt!.length, `Against this data: ${m}`));
+				}
+				const inBlocks = it.analysis.blocks.flatMap((b) =>
+					b.errors.map((e) => diag(it.textStart + e.start, Math.max(e.end - e.start, 1), e.message)),
+				);
+				const slot = it.analysis.slotError ? [diag(it.node.getStart(), it.node.getWidth(), it.analysis.slotError)] : [];
+				return [...inBlocks, ...slot];
+			});
 			return [...prior, ...extra];
 		};
 
@@ -149,7 +139,7 @@ const init = (modules: { typescript: typeof TS }) => {
 		proxy.provideInlayHints = (fileName, span, preferences) => {
 			const prior = ls.provideInlayHints(fileName, span, preferences);
 			const hints: TS.InlayHint[] = itemsFor(fileName)
-				.filter((it) => it.node.getEnd() >= span.start && it.node.getEnd() <= span.start + span.length)
+				.filter((it) => !it.reportAt && it.node.getEnd() >= span.start && it.node.getEnd() <= span.start + span.length)
 				.map((it) => ({
 					text: `: ${it.analysis.type}`,
 					position: it.node.getEnd(),
