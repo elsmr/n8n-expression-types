@@ -2,7 +2,15 @@
 // declaration files it serves, and Luxon's types travel inside, so it works in any
 // workspace. A .vsix is a zip with two manifest files; vsce is not needed and would drop
 // node_modules, which is where tsserver looks for the plugin.
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	cpSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	realpathSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -14,20 +22,35 @@ const manifest = JSON.parse(readFileSync(path.join(root, 'packages/vscode/packag
 const stage = mkdtempSync(path.join(tmpdir(), 'n8n-expressions-'));
 const ext = path.join(stage, 'extension');
 
-cpSync(path.join(root, 'packages/vscode'), ext, { recursive: true, filter: (src) => !src.includes(`${path.sep}node_modules`) });
+cpSync(path.join(root, 'packages/vscode'), ext, {
+	recursive: true,
+	filter: (src) => !src.includes(`${path.sep}node_modules`),
+});
 
-// tsserver requires the plugin by name from <extension>/node_modules; the plugin reads its
-// data root as ../../core from dist/, which lands on node_modules/@n8n/core.
+// tsserver requires the plugin by name from <extension>/node_modules; the plugin resolves
+// @n8n/expression-types from there for its declaration files and Luxon.
 const plugin = path.join(ext, 'node_modules/@n8n/expression-ts-plugin');
 mkdirSync(plugin, { recursive: true });
-for (const f of ['package.json', 'entry.cjs', 'dist']) cpSync(path.join(root, 'packages/plugin', f), path.join(plugin, f), { recursive: true });
-const core = path.join(ext, 'node_modules/@n8n/core');
+for (const f of ['package.json', 'entry.cjs', 'dist'])
+	cpSync(path.join(root, 'packages/plugin', f), path.join(plugin, f), { recursive: true });
+const core = path.join(ext, 'node_modules/@n8n/expression-types');
 mkdirSync(path.join(core, 'node_modules/@types'), { recursive: true });
-for (const f of ['shapes.d.ts', 'extensions.d.ts']) cpSync(path.join(root, 'packages/core', f), path.join(core, f));
-cpSync(realpathSync(path.dirname(require.resolve('luxon/package.json'))), path.join(core, 'node_modules/luxon'), { recursive: true });
-cpSync(realpathSync(path.dirname(require.resolve('@types/luxon/package.json'))), path.join(core, 'node_modules/@types/luxon'), { recursive: true });
+cpSync(path.join(root, 'packages/core/package.json'), path.join(core, 'package.json'));
+for (const f of ['shapes.d.ts', 'extensions.d.ts'])
+	cpSync(path.join(root, 'packages/core', f), path.join(core, f));
+cpSync(
+	realpathSync(path.dirname(require.resolve('luxon/package.json'))),
+	path.join(core, 'node_modules/luxon'),
+	{ recursive: true },
+);
+cpSync(
+	realpathSync(path.dirname(require.resolve('@types/luxon/package.json'))),
+	path.join(core, 'node_modules/@types/luxon'),
+	{ recursive: true },
+);
 
-const xml = (s) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
+const xml = (s) =>
+	s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
 writeFileSync(
 	path.join(stage, 'extension.vsixmanifest'),
 	`<?xml version="1.0" encoding="utf-8"?>
@@ -68,6 +91,8 @@ writeFileSync(
 
 const out = path.join(root, 'n8n-expressions.vsix');
 rmSync(out, { force: true });
-execFileSync('zip', ['-qr', out, 'extension.vsixmanifest', '[Content_Types].xml', 'extension'], { cwd: stage });
+execFileSync('zip', ['-qr', out, 'extension.vsixmanifest', '[Content_Types].xml', 'extension'], {
+	cwd: stage,
+});
 rmSync(stage, { recursive: true, force: true });
 console.log(`${path.relative(root, out)}\n  code --install-extension ${path.relative(root, out)}`);

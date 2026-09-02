@@ -59,12 +59,37 @@ declare global {
 			setAll(values: Record<string, string>): void;
 		};
 	}
-	type N8nMode = 'cli' | 'error' | 'integrated' | 'internal' | 'manual' | 'retry' | 'trigger' | 'webhook' | 'evaluation' | 'chat';
-	interface N8nPrevNode { name: string; outputIndex: number; runIndex: number }
-	interface N8nWorkflow { id: string; name: string; active: boolean }
+	type N8nMode =
+		| 'cli'
+		| 'error'
+		| 'integrated'
+		| 'internal'
+		| 'manual'
+		| 'retry'
+		| 'trigger'
+		| 'webhook'
+		| 'evaluation'
+		| 'chat';
+	interface N8nPrevNode {
+		name: string;
+		outputIndex: number;
+		runIndex: number;
+	}
+	interface N8nWorkflow {
+		id: string;
+		name: string;
+		active: boolean;
+	}
 	interface N8nAgentInfo {
 		memoryConnectedToAgent: boolean;
-		tools: Array<{ connected: boolean; name: string; type: string; resource?: string; operation?: string; hasCredentials?: boolean }>;
+		tools: Array<{
+			connected: boolean;
+			name: string;
+			type: string;
+			resource?: string;
+			operation?: string;
+			hasCredentials?: boolean;
+		}>;
 	}
 	type N8nFromAIType = 'string' | 'number' | 'boolean' | 'json';
 

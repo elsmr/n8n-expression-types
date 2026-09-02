@@ -25,14 +25,22 @@ type Widen<T> = T extends string
 						? { -readonly [K in keyof T]: Widen<T[K]> }
 						: T;
 
-type Literals<K> = K extends readonly (infer S extends string)[] ? ([S] extends [never] ? string : S) : string;
+type Literals<K> = K extends readonly (infer S extends string)[]
+	? [S] extends [never]
+		? string
+		: S
+	: string;
 type BinaryKeys<N> = N extends NodeRuntime ? Literals<N['binaryKeys']> : string;
 type ParamsOf<P> = P extends Json ? Widen<P> : Record<string, any>;
 type NodeData<N> = N extends NodeRuntime
 	? N8nNodeData<Widen<N['json']>, BinaryKeys<N>, ParamsOf<N['params']>>
 	: N8nAnyNodeData;
-type Nodes<R extends RuntimeTypes> = R['nodes'] extends Record<string, NodeRuntime> ? R['nodes'] : {};
-type InputOf<R extends RuntimeTypes> = R['input'] extends NodeRuntime ? R['input'] : { json: N8nLooseJson };
+type Nodes<R extends RuntimeTypes> = R['nodes'] extends Record<string, NodeRuntime>
+	? R['nodes']
+	: {};
+type InputOf<R extends RuntimeTypes> = R['input'] extends NodeRuntime
+	? R['input']
+	: { json: N8nLooseJson };
 type Vars<K> = K extends readonly (infer S extends string)[]
 	? [S] extends [never]
 		? Record<string, string>
@@ -51,10 +59,18 @@ export type LambdaContext<R extends RuntimeTypes> = {
 	/** @deprecated use $('Node') */
 	$node: {
 		[K in keyof Nodes<R>]: Nodes<R>[K] extends NodeRuntime
-			? N8nLegacyNode<Widen<Nodes<R>[K]['json']>, BinaryKeys<Nodes<R>[K]>, ParamsOf<Nodes<R>[K]['params']>>
+			? N8nLegacyNode<
+					Widen<Nodes<R>[K]['json']>,
+					BinaryKeys<Nodes<R>[K]>,
+					ParamsOf<Nodes<R>[K]['params']>
+				>
 			: never;
 	} & Record<string, N8nLegacyNode<Record<string, any>, string, Record<string, any>>>;
-	$items: (nodeName?: string, outputIndex?: number, runIndex?: number) => Array<N8nItem<Record<string, any>, string>>;
+	$items: (
+		nodeName?: string,
+		outputIndex?: number,
+		runIndex?: number,
+	) => Array<N8nItem<Record<string, any>, string>>;
 	/** @deprecated */
 	$item: (itemIndex: number, runIndex?: number) => any;
 
@@ -95,9 +111,24 @@ export type LambdaContext<R extends RuntimeTypes> = {
 	$jmespath: (data: Record<string, any> | any[], query: string) => any;
 	$jmesPath: (data: Record<string, any> | any[], query: string) => any;
 	$evaluateExpression: (expression: string, itemIndex?: number) => any;
-	$fromAI: (name: string, description?: string, type?: N8nFromAIType, defaultValue?: unknown) => any;
-	$fromAi: (name: string, description?: string, type?: N8nFromAIType, defaultValue?: unknown) => any;
-	$fromai: (name: string, description?: string, type?: N8nFromAIType, defaultValue?: unknown) => any;
+	$fromAI: (
+		name: string,
+		description?: string,
+		type?: N8nFromAIType,
+		defaultValue?: unknown,
+	) => any;
+	$fromAi: (
+		name: string,
+		description?: string,
+		type?: N8nFromAIType,
+		defaultValue?: unknown,
+	) => any;
+	$fromai: (
+		name: string,
+		description?: string,
+		type?: N8nFromAIType,
+		defaultValue?: unknown,
+	) => any;
 };
 
 /** An n8n expression string produced from a lambda, remembering the type it evaluates to. */

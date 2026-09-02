@@ -16,13 +16,16 @@ signature help come out of the checker unchanged, with positions mapped back int
 literal.
 
 Result types reach the host program through a global interface, `N8nResolvedTypes`,
-keyed by `context::text`, in a types package the tooling writes under the project's
-`node_modules/@types`. `tsc` includes `@types/*` automatically; projects with an explicit
-`types` list (n8n's shared tsconfigs) add the name once. `generate` writes it before `tsc`
-in CI, the Prisma model; the plugin writes the same file while you type and adds it as a
-root so the editor needs no config. A memory-only root was tried and rejected: tsserver
-requires a real file behind every source file. A `tsc` wrapper like `vue-tsc` was rejected
-in favour of plain `tsc`. Each distinct data type appears once in the lookup as a local alias.
+keyed by `context::text`, in a hidden, gitignored file the tooling writes at
+`<project>/.n8n/expressions.d.ts`. Projects pull it in with one `include` glob; a glob
+that matches nothing is fine, and missing keys fall back to `any`, so a fresh clone
+type-checks before anything has run. `n8n-expressions generate` writes it before `tsc` in
+CI, the React Router `typegen && tsc` model; the plugin writes the same file while you
+type (byte-compare, atomic rename, as GraphQLSP does) and adds it as a root so the editor
+needs no config. A memory-only root was tried and rejected: tsserver requires a real file
+behind every source file. A `tsc` wrapper like `vue-tsc` was rejected in favour of plain
+`tsc`; `tsc` never loads plugins, so CI precision needs the generate step. Each distinct
+data type appears once in the lookup as a local alias.
 
 ## Decisions
 
@@ -75,7 +78,11 @@ that yields `string` is reported, when the slot type spells out primitives.
   the extension bundles it.
 - Default context from `runtime.json`: silent wrong answers.
 - A visible generated `.d.ts` in the source tree (gql.tada, TanStack Router): works, but
-  it is noise in review and in the tree; `node_modules/@types` is invisible and per project.
+  it is noise in review and in the tree; a gitignored `.n8n/` folder is invisible and per
+  project, the pattern of Astro, Next, React Router and Expo.
+- `node_modules/@types/<lookup>`: tried first. Projects with a `types` list (n8n's) fail
+  on a fresh clone until the file exists, and nothing else writes there; Prisma left
+  `node_modules` in v7 because pnpm shares the directory across a workspace.
 - Memory-only root file in the plugin plus a `tsc` wrapper for CI: tsserver rejects roots
   without a file, and a wrapper CLI was not wanted.
 
@@ -124,8 +131,8 @@ Next for scale: batch all blocks of a file into one virtual file per shape. Meas
 - Position mapping assumes no escape sequences in the literal.
 - Data types that name your own interfaces are not portable into the lookup and fall back
   to the loose type.
-- The plugin resolves `shapes.d.ts`, `extensions.d.ts` and Luxon from `packages/core`; a
-  published package must carry them.
+- Contexts a project defines with `defineContext` are not visible to the plugin, which
+  knows only the contexts compiled into `@n8n/expression-types`.
 - TypeScript 7 has no language service API or plugin model; everything here needs 6.x.
 
 ## Next steps

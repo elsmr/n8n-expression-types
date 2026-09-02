@@ -4,8 +4,18 @@ import { sample } from './sample-data.ts';
 
 export const orderId = expression(({ $ }) => $('Webhook').item.json.body.orderId, sample);
 export const subject = expression(({ $json }) => `Order ${$json.n} for ${$json.user.name}`, sample);
-export const total = expression(({ $input }) => $input.all().map((i) => i.json.n).sum(), sample);
-export const nextMonth = expression(({ $now }) => $now.plus({ days: 1 }).beginningOf('month').format('yyyy-MM'), sample);
+export const total = expression(
+	({ $input }) =>
+		$input
+			.all()
+			.map((i) => i.json.n)
+			.sum(),
+	sample,
+);
+export const nextMonth = expression(
+	({ $now }) => $now.plus({ days: 1 }).beginningOf('month').format('yyyy-MM'),
+	sample,
+);
 export const flag = expression(({ $if, $json }) => $if($json.n > 1, $json.test, $json.n), sample);
 export const email = expression(({ $json }) => $json.user.emails.first().isEmail(), sample);
 export const method = expression(({ $ }) => $('Webhook').params.httpMethod, sample);

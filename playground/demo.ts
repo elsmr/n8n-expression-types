@@ -9,9 +9,9 @@ import { credentialSample, paginationSample, sample } from './sample-data.ts';
 
 // 1. Declare. Nothing is known about the data yet, so $json is loose.
 export const orderId = expr("={{ $('Webhook').item.json.body.orderId }}");
-export const subject = expr('=Order {{ $json.n }} for {{ $json.user.name }}');   // text around blocks: always a string
+export const subject = expr('=Order {{ $json.n }} for {{ $json.user.name }}'); // text around blocks: always a string
 export const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');
-export const loose = expr('={{ $json.whatever.you.like.toTitleCase() }}');      // no error: $json can hold anything
+export const loose = expr('={{ $json.whatever.you.like.toTitleCase() }}'); // no error: $json can hold anything
 export const multiline = expr(`={{
 	$json.tags
 		.filter((t) => t !== 'b')
@@ -23,7 +23,7 @@ export const nextUrl = expr.httpPagination('={{ $response.body.next }}');
 export const stop = expr.httpPagination('={{ $pageCount >= 10 }}');
 export const auth = expr.credential('={{ "Bearer " + $self.apiKey }}');
 export const label = expr.description('={{ $parameter.operation }}');
-export const badGlobal = expr('={{ $pageCount }}');                              // InvalidExpr: not a node-parameter global
+export const badGlobal = expr('={{ $pageCount }}'); // InvalidExpr: not a node-parameter global
 
 // 3. Resolve. The plugin checks each expression against the data; the type is exact for that pairing.
 export const resolved = () => {
@@ -36,9 +36,12 @@ export const resolved = () => {
 	const g: string = resolve(auth, credentialSample);
 	return [a, b, c, d, e, f, g];
 };
-export type NextUrl = Resolve<typeof nextUrl, typeof paginationSample>;                // string
-export type OrderId = Resolve<typeof orderId, typeof sample>;                  // number
-export type NoNext = Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>; // N8nResolveError
+export type NextUrl = Resolve<typeof nextUrl, typeof paginationSample>; // string
+export type OrderId = Resolve<typeof orderId, typeof sample>; // number
+export type NoNext = Resolve<
+	typeof nextUrl,
+	{ context: 'httpPagination'; response: { items: number[] } }
+>; // N8nResolveError
 
 // 4. Language. Hover for TypeScript's own quick info; n8n methods carry their docs.
 export const title = expr('={{ $json.test.toTitleCase() }}');
@@ -63,9 +66,9 @@ export const language = () => [
 ];
 
 // 5. Errors. Invalid text is wrong anywhere; a resolve error is this data not fitting.
-export const typo = expr('={{ $json.test.toUppercase() }}');                    // fine alone, fails against data
+export const typo = expr('={{ $json.test.toUppercase() }}'); // fine alone, fails against data
 export const nullable = expr('={{ $json.nothing.x }}');
-export const unsafe = expr('={{ $json.constructor.name + $.length }}');          // n8n sandbox rules
+export const unsafe = expr('={{ $json.constructor.name + $.length }}'); // n8n sandbox rules
 export const errors = () => {
 	// @ts-expect-error N8nResolveError: toUppercase is not on string
 	const a: string = resolve(typo, sample);

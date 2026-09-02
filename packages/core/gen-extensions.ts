@@ -16,7 +16,13 @@ const { extendedFunctions } = require('n8n-workflow/dist/cjs/extensions/extended
 	extendedFunctions: Record<string, Function>;
 };
 
-type DocArg = { name: string; type?: string; optional?: boolean; variadic?: boolean; description?: string };
+type DocArg = {
+	name: string;
+	type?: string;
+	optional?: boolean;
+	variadic?: boolean;
+	description?: string;
+};
 type Doc = {
 	name: string;
 	returnType?: string;
@@ -34,8 +40,12 @@ const jsdoc = (method: string, doc: Doc | undefined, indent: string): string => 
 	const lines = [
 		...(doc.description ? [doc.description] : []),
 		...(doc.name !== method ? [`Alias of \`${doc.name}()\`.`] : []),
-		...(doc.args ?? []).filter((a) => a.description).map((a) => `@param ${a.name} ${a.description}`),
-		...(doc.examples ?? []).slice(0, 2).map((e) => `@example ${e.example}${e.evaluated ? ` // ${e.evaluated}` : ''}`),
+		...(doc.args ?? [])
+			.filter((a) => a.description)
+			.map((a) => `@param ${a.name} ${a.description}`),
+		...(doc.examples ?? [])
+			.slice(0, 2)
+			.map((e) => `@example ${e.example}${e.evaluated ? ` // ${e.evaluated}` : ''}`),
 		...(doc.docURL ? [`@see ${doc.docURL}`] : []),
 	];
 	if (lines.length === 0) return '';
@@ -69,7 +79,14 @@ const docType = (t: string | undefined, self: string): string => {
 
 // Doc metadata says `any` where the real return is the element or key type.
 const RETURN_OVERRIDES: Record<string, Record<string, string>> = {
-	Array: { first: 'T', last: 'T', randomItem: 'T', unique: 'T[]', removeDuplicates: 'T[]', compact: 'T[]' },
+	Array: {
+		first: 'T',
+		last: 'T',
+		randomItem: 'T',
+		unique: 'T[]',
+		removeDuplicates: 'T[]',
+		compact: 'T[]',
+	},
 	Object: { keys: 'string[]', values: 'any[]' },
 };
 
@@ -86,7 +103,11 @@ const signature = (method: string, doc: Doc | undefined, self: string): string =
 
 // n8n dispatches these at runtime, but as declarations they would collide with an existing
 // property: Array#length from lib, DateTime#isWeekend from @types/luxon (a getter, not a method).
-const COLLIDES: Record<string, string[]> = { String: ['length'], Array: ['length'], Date: ['isWeekend'] };
+const COLLIDES: Record<string, string[]> = {
+	String: ['length'],
+	Array: ['length'],
+	Date: ['isWeekend'],
+};
 
 const members = (typeName: string): string => {
 	const map = ExpressionExtensions.find((m) => m.typeName === typeName);
@@ -106,7 +127,8 @@ const functions = Object.entries(extendedFunctions)
 	.map(([name, fn]) => {
 		const doc = (fn as { doc?: Doc }).doc;
 		const head = jsdoc(name, doc, '\t');
-		if (name === '$ifEmpty') return `${head}\tfunction $ifEmpty<V, E>(value: V, defaultValue: E): V | E;`;
+		if (name === '$ifEmpty')
+			return `${head}\tfunction $ifEmpty<V, E>(value: V, defaultValue: E): V | E;`;
 		if (name === '$not') return `${head}\tfunction $not(value: unknown): boolean;`;
 		return `${head}\tfunction ${signature(name, doc ?? { name, returnType: 'number', args: [{ name: 'numbers', type: 'number', variadic: true }] }, 'root')}`;
 	});
@@ -159,19 +181,24 @@ console.log('wrote extensions.d.ts');
 
 // skipLibCheck hides duplicate-identifier clashes with lib or @types/luxon; check them here.
 const dir = path.dirname(fileURLToPath(outPath));
-const program = ts.createProgram([path.join(dir, 'extensions.d.ts'), path.join(dir, 'shapes.d.ts')], {
-	strict: true,
-	target: ts.ScriptTarget.ESNext,
-	lib: ['lib.es2023.d.ts'],
-	module: ts.ModuleKind.ESNext,
-	moduleResolution: ts.ModuleResolutionKind.Bundler,
-	types: [],
-	noEmit: true,
-	skipLibCheck: false,
-});
+const program = ts.createProgram(
+	[path.join(dir, 'extensions.d.ts'), path.join(dir, 'shapes.d.ts')],
+	{
+		strict: true,
+		target: ts.ScriptTarget.ESNext,
+		lib: ['lib.es2023.d.ts'],
+		module: ts.ModuleKind.ESNext,
+		moduleResolution: ts.ModuleResolutionKind.Bundler,
+		types: [],
+		noEmit: true,
+		skipLibCheck: false,
+	},
+);
 const clashes = ts.getPreEmitDiagnostics(program).filter((d) => d.code === 2300);
 for (const d of clashes) {
 	const { line } = d.file!.getLineAndCharacterOfPosition(d.start!);
-	console.error(`${path.relative(process.cwd(), d.file!.fileName)}:${line + 1}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+	console.error(
+		`${path.relative(process.cwd(), d.file!.fileName)}:${line + 1}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`,
+	);
 }
 if (clashes.length) process.exit(1);

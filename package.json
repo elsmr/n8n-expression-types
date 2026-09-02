@@ -3,17 +3,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "open": "pnpm build:plugin && code --extensionDevelopmentPath=\"$PWD/packages/vscode\" \"$PWD/playground\" \"$PWD/playground/node-description.ts\"",
-    "test": "pnpm build:plugin && tsx packages/plugin/plugin.test.ts && tsx packages/plugin/tsserver.test.ts",
-    "typecheck": "tsc -p packages/core && tsc -p packages/plugin && pnpm generate && tsc -p playground",
-    "generate": "tsx packages/core/generate.ts playground/tsconfig.json --expression-errors=warn",
+    "open": "pnpm build && code --extensionDevelopmentPath=\"$PWD/packages/vscode\" \"$PWD/playground\" \"$PWD/playground/demo.ts\"",
+    "dev": "pnpm build && pnpm -r --parallel dev",
+    "build": "pnpm --filter @n8n/expression-types build && pnpm --filter @n8n/expression-ts-plugin build",
+    "test": "pnpm build && tsx packages/plugin/plugin.test.ts && tsx packages/plugin/tsserver.test.ts",
+    "typecheck": "biome format . && pnpm build && pnpm generate && tsc -p packages/plugin && tsc -p playground",
+    "generate": "node packages/core/dist/cli.js generate playground/tsconfig.json --expression-errors=warn",
     "drift": "tsx packages/core/drift.ts",
     "gen-extensions": "tsx packages/core/gen-extensions.ts",
-    "vsix": "pnpm build:plugin && node scripts/build-vsix.mjs",
-    "build:plugin": "pnpm --filter @n8n/expression-ts-plugin build",
-    "prepare": "pnpm build:plugin && pnpm generate"
+    "vsix": "pnpm build && node scripts/build-vsix.mjs",
+    "prepare": "pnpm build && pnpm generate",
+    "format": "biome format --write ."
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
     "@types/node": "^24.0.0",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.13",

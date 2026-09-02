@@ -46,9 +46,8 @@ const bad  = expr('={{ $pageCount }}');                           // InvalidExpr
 
 **`resolve()` and `Resolve<>` are where data enters.** The expression is checked against
 the data's type, and the result type is specific to that pairing. The lookup behind it is
-a types package under the project's `node_modules`, written by the plugin while you type
-and by `generate` before `tsc` in CI, the way `prisma generate` works. Plain `tsc`, no
-wrapper, nothing in the source tree.
+a hidden file, `.n8n/expressions.d.ts`, written by the plugin while you type and by
+`n8n-expressions generate` before `tsc` in CI. Plain `tsc`, no wrapper, nothing to commit.
 
 ```ts
 const url: string = resolve(next, paginationSample);
@@ -76,16 +75,17 @@ flowchart LR
   shape --> vf[virtual TS file per expression<br/>+ globals for the context<br/>+ extensions.d.ts]
   vf --> ls[TypeScript language service]
   ls --> plugin[tsserver plugin: diagnostics, hover, completions, fixes]
-  ls --> gen[generate: lookup under node_modules/@types + expression report; then plain tsc]
+  ls --> gen[n8n-expressions generate: .n8n/expressions.d.ts + expression report; then plain tsc]
 ```
 
 Each `{{ }}` body becomes `const __r0 = (<body>);` in a virtual file next to ambient
 declarations for the context: `$json`, `$input`, `$('Node')`, `$now`, and the n8n
 extension methods. The checker does the rest. TypeScript cannot parse a string at the
 type level, so result types reach the program through a lookup interface keyed by context
-and text, written to `node_modules/@types/n8n-expressions-lookup`. tsc includes that
-automatically; projects that set `types` add the name once. The plugin also adds it as a
-root file, so the editor needs no config at all.
+and text, written to `.n8n/expressions.d.ts` in the project. tsc picks it up through one
+`include` glob; when the file is absent, resolved types fall back to `any`, so a fresh
+clone type-checks before anything has run. The plugin adds it as a root file itself, so
+the editor needs no config at all.
 
 Grounded in n8n's code: the globals per context come from `workflow-data-proxy.ts`,
 `get-additional-keys.ts`, `routing-node.ts` and `pagination.ts`; `extensions.d.ts` is
@@ -106,6 +106,28 @@ Runtime data with no known shape is loose (`any`): `$json.anything.goes()` passe
 unknown globals, wrong contexts and typos on known types still fail. Data becomes strict
 the moment it is passed to `resolve()`.
 
+## Use it in a project
+
+```sh
+pnpm add @n8n/expression-types && pnpm add -D @n8n/expression-ts-plugin
+```
+
+```jsonc
+// tsconfig.json
+"compilerOptions": { "plugins": [{ "name": "@n8n/expression-ts-plugin" }] },  // any tsserver editor; not needed with the VS Code extension
+"include": ["src", ".n8n/*.d.ts"]                                            // lets plain tsc see the lookup
+```
+
+Add `.n8n/` to `.gitignore`. Type the slots that hold expressions as `Expression<T, Context>`,
+use `expr()` for loose strings, `resolve()` where data exists. In CI:
+
+```sh
+n8n-expressions generate tsconfig.json && tsc
+```
+
+`generate` fails on broken expressions and writes the lookup that makes `tsc` exact. Without
+it `tsc` still passes; resolved types are `any`.
+
 ## Repo
 
 | Path | What |
@@ -117,9 +139,10 @@ the moment it is passed to `resolve()`.
 | `docs/design.md` | Decisions, alternatives rejected, known gaps, cost numbers |
 
 ```sh
-pnpm test         # plugin behaviour, headless
-pnpm typecheck    # core, plugin, generate, then plain tsc on the playground
-pnpm generate     # write the lookup + report expression diagnostics; run before tsc in CI
+pnpm test         # plugin behaviour, headless and against a real tsserver
+pnpm typecheck    # build, generate, then plain tsc on plugin and playground
+pnpm generate     # n8n-expressions generate on the playground: lookup + expression report
+pnpm dev          # rebuild core and plugin on change
 pnpm drift        # n8n-workflow globals vs declared layers
 ```
 

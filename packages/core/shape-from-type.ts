@@ -20,12 +20,16 @@ export const shapeFromType = (
 	// Samples are often `as const`; the expression should see string, not 'hello'.
 	const text = (t: TS.Type): string => {
 		if (t.isUnion()) return [...new Set(t.types.map(text))].join(' | ');
-		if (t.isLiteral() || t.flags & ts.TypeFlags.BooleanLiteral) return raw(checker.getBaseTypeOfLiteralType(t));
+		if (t.isLiteral() || t.flags & ts.TypeFlags.BooleanLiteral)
+			return raw(checker.getBaseTypeOfLiteralType(t));
 		if (checker.isArrayType(t) || checker.isTupleType(t)) {
 			const members = [...new Set(checker.getTypeArguments(t as TS.TypeReference).map(text))];
 			return members.length === 0 ? 'unknown[]' : `Array<${members.join(' | ')}>`;
 		}
-		if (t.flags & ts.TypeFlags.Object && checker.getSignaturesOfType(t, ts.SignatureKind.Call).length === 0) {
+		if (
+			t.flags & ts.TypeFlags.Object &&
+			checker.getSignaturesOfType(t, ts.SignatureKind.Call).length === 0
+		) {
 			const props = checker.getPropertiesOfType(t);
 			if (props.length > 0) {
 				return `{ ${props.map((p) => `${JSON.stringify(p.name)}: ${text(checker.getTypeOfSymbol(p))}`).join('; ')} }`;
@@ -39,9 +43,13 @@ export const shapeFromType = (
 	const literals = (t: TS.Type | undefined): string[] | undefined => {
 		if (!t) return undefined;
 		const elements =
-			checker.isTupleType(t) || checker.isArrayType(t) ? checker.getTypeArguments(t as TS.TypeReference) : [t];
+			checker.isTupleType(t) || checker.isArrayType(t)
+				? checker.getTypeArguments(t as TS.TypeReference)
+				: [t];
 		const flat = elements.flatMap((e) => (e.isUnion() ? e.types : [e]));
-		return flat.every((e) => e.isStringLiteral()) ? flat.map((e) => (e as TS.StringLiteralType).value) : undefined;
+		return flat.every((e) => e.isStringLiteral())
+			? flat.map((e) => (e as TS.StringLiteralType).value)
+			: undefined;
 	};
 
 	const contextType = prop(type, 'context');
@@ -55,7 +63,16 @@ export const shapeFromType = (
 			const n = checker.getTypeOfSymbol(sym);
 			const json = prop(n, 'json');
 			return json
-				? [[sym.name, { json: text(json), binaryKeys: literals(prop(n, 'binaryKeys')), params: optText(prop(n, 'params')) }] as const]
+				? [
+						[
+							sym.name,
+							{
+								json: text(json),
+								binaryKeys: literals(prop(n, 'binaryKeys')),
+								params: optText(prop(n, 'params')),
+							},
+						] as const,
+					]
 				: [];
 		}),
 	);

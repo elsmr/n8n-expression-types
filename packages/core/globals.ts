@@ -38,7 +38,8 @@ export const defineContext = <C extends ContextDefinition>(definition: C): C => 
 };
 
 export const contextNames = (): ExpressionContext[] => [...registry.keys()] as ExpressionContext[];
-export const isContextName = (s: string | undefined): s is ExpressionContext => registry.has(s ?? '');
+export const isContextName = (s: string | undefined): s is ExpressionContext =>
+	registry.has(s ?? '');
 
 export type NodeRuntime = {
 	json: Json;
@@ -118,7 +119,10 @@ export const shapeFromValues = (rt: RuntimeTypes): RuntimeShape => ({
 	env: rt.env,
 });
 
-export const emptyShape = (context: ExpressionContext = 'nodeParameter'): RuntimeShape => ({ context, nodes: {} });
+export const emptyShape = (context: ExpressionContext = 'nodeParameter'): RuntimeShape => ({
+	context,
+	nodes: {},
+});
 
 // ---------- layers ----------
 
@@ -164,7 +168,10 @@ const item: Layer = (s) => {
 	const B = keyUnion(s.inputBinaryKeys, 'string');
 	const P = or(s.parameters);
 	const nodeDataMap = Object.entries(s.nodes)
-		.map(([name, n]) => `${JSON.stringify(name)}: N8nNodeData<${n.json}, ${keyUnion(n.binaryKeys, 'string')}, ${or(n.params)}>;`)
+		.map(
+			([name, n]) =>
+				`${JSON.stringify(name)}: N8nNodeData<${n.json}, ${keyUnion(n.binaryKeys, 'string')}, ${or(n.params)}>;`,
+		)
 		.join('\n\t\t');
 	return `
 	interface NodeDataMap {
@@ -291,12 +298,27 @@ declare global {
 }
 
 /** Node parameter values: runs per item with $json, $input, $('Node'), ... */
-export const nodeParameterContext = defineContext<NodeParameterContext>({ name: 'nodeParameter', layers: ['core', 'item'] });
+export const nodeParameterContext = defineContext<NodeParameterContext>({
+	name: 'nodeParameter',
+	layers: ['core', 'item'],
+});
 /** HTTP Request pagination options: adds $request, $response, $version, $pageCount. */
-export const httpPaginationContext = defineContext<HttpPaginationContext>({ name: 'httpPagination', layers: ['core', 'item', 'pagination'] });
+export const httpPaginationContext = defineContext<HttpPaginationContext>({
+	name: 'httpPagination',
+	layers: ['core', 'item', 'pagination'],
+});
 /** Declarative node routing: adds $credentials, $value, $response, $responseItem, $request, $self. */
-export const routingContext = defineContext<RoutingContext>({ name: 'routing', layers: ['core', 'item', 'routing'] });
+export const routingContext = defineContext<RoutingContext>({
+	name: 'routing',
+	layers: ['core', 'item', 'routing'],
+});
 /** Node description fields (subtitle, outputs): $parameter, no item data. */
-export const descriptionContext = defineContext<DescriptionContext>({ name: 'description', layers: ['core', 'description'] });
+export const descriptionContext = defineContext<DescriptionContext>({
+	name: 'description',
+	layers: ['core', 'description'],
+});
 /** Credential fields: $self, $secrets, $vars. */
-export const credentialContext = defineContext<CredentialContext>({ name: 'credential', layers: ['core', 'credential'] });
+export const credentialContext = defineContext<CredentialContext>({
+	name: 'credential',
+	layers: ['core', 'credential'],
+});

@@ -53,7 +53,14 @@ const brandOf = (ts: typeof TS, checker: TS.TypeChecker, type: TS.Type | undefin
 		const nameSym = ctx && checker.getPropertyOfType(checker.getTypeOfSymbol(ctx), 'name');
 		const nameType = nameSym && checker.getTypeOfSymbol(nameSym);
 		if (!nameType?.isStringLiteral() || !isContext(nameType.value) || !val) continue;
-		return { context: nameType.value, expected: checker.typeToString(checker.getTypeOfSymbol(val), undefined, ts.TypeFormatFlags.NoTruncation) };
+		return {
+			context: nameType.value,
+			expected: checker.typeToString(
+				checker.getTypeOfSymbol(val),
+				undefined,
+				ts.TypeFormatFlags.NoTruncation,
+			),
+		};
 	}
 	return undefined;
 };
@@ -66,7 +73,11 @@ const staticShape = (ts: typeof TS, node: TS.Node, context: ExpressionContext): 
 
 const exprCallContext = (ts: typeof TS, callee: TS.Expression): ExpressionContext | undefined => {
 	if (ts.isIdentifier(callee) && callee.text === 'expr') return 'nodeParameter';
-	if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === 'expr') {
+	if (
+		ts.isPropertyAccessExpression(callee) &&
+		ts.isIdentifier(callee.expression) &&
+		callee.expression.text === 'expr'
+	) {
 		return isContext(callee.name.text) ? callee.name.text : undefined;
 	}
 	return undefined;
@@ -78,16 +89,27 @@ const literalBehind = (ts: typeof TS, checker: TS.TypeChecker, arg: TS.Expressio
 	if (!ts.isIdentifier(arg)) return undefined;
 	const symbol = checker.getSymbolAtLocation(arg);
 	// Imported names are aliases; follow them to the declaring const.
-	const target = symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+	const target =
+		symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
 	const decl = target?.valueDeclaration;
-	if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer || !ts.isCallExpression(decl.initializer)) return undefined;
+	if (
+		!decl ||
+		!ts.isVariableDeclaration(decl) ||
+		!decl.initializer ||
+		!ts.isCallExpression(decl.initializer)
+	)
+		return undefined;
 	const init = decl.initializer;
 	const first = init.arguments[0];
 	if (!first || !ts.isStringLiteralLike(first)) return undefined;
 	return { literal: first, context: exprCallContext(ts, init.expression) };
 };
 
-export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.TypeChecker): Found[] => {
+export const findExpressions = (
+	ts: typeof TS,
+	sf: TS.SourceFile,
+	checker: TS.TypeChecker,
+): Found[] => {
 	const found: Found[] = [];
 	const push = (f: Omit<Found, 'expression' | 'textStart'>) =>
 		found.push({ ...f, expression: f.node.text, textStart: f.node.getStart(sf) + 1 });
@@ -105,7 +127,9 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
 			context: shape.context,
 			shape,
 			reportAt: { start: site.getStart(sf), length: site.getWidth(sf) },
-			dataText: portable(checker.typeToString(dataType, undefined, ts.TypeFormatFlags.NoTruncation)),
+			dataText: portable(
+				checker.typeToString(dataType, undefined, ts.TypeFormatFlags.NoTruncation),
+			),
 		});
 	};
 
@@ -125,7 +149,11 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
 					pushResolve(behind, checker.getTypeAtLocation(second), node);
 				}
 			}
-		} else if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === 'Resolve') {
+		} else if (
+			ts.isTypeReferenceNode(node) &&
+			ts.isIdentifier(node.typeName) &&
+			node.typeName.text === 'Resolve'
+		) {
 			const [exprArg, dataArg] = node.typeArguments ?? [];
 			if (exprArg && dataArg && ts.isTypeQueryNode(exprArg) && ts.isIdentifier(exprArg.exprName)) {
 				const behind = literalBehind(ts, checker, exprArg.exprName);
@@ -154,7 +182,10 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
  * the text is invalid; against data it means the data does not fit. The messages
  * themselves are diagnostics (plugin, generate), not types.
  */
-export const resolvedType = (a: Analysis, against: 'definition' | 'data' = 'definition'): string => {
+export const resolvedType = (
+	a: Analysis,
+	against: 'definition' | 'data' = 'definition',
+): string => {
 	const failed = a.blocks.some((b) => b.errors.length > 0) || !!a.slotError;
 	if (!failed) return a.type;
 	return against === 'data' ? 'N8nResolveError' : 'N8nInvalidExpression';
@@ -196,7 +227,9 @@ export const renderResolved = (entries: Map<string, LookupEntry>): string => {
  * Lookup entries from analysed items: the loose type from the expr() declaration, and
  * one [dataType, result] pair per resolve()/Resolve<> site whose data type is portable.
  */
-export const lookupEntries = (items: Array<Found & { analysis: Analysis }>): Map<string, LookupEntry> => {
+export const lookupEntries = (
+	items: Array<Found & { analysis: Analysis }>,
+): Map<string, LookupEntry> => {
 	const out = new Map<string, LookupEntry>();
 	const entry = (key: string) => out.get(key) ?? out.set(key, { strict: [] }).get(key)!;
 	for (const it of items) {
@@ -235,11 +268,16 @@ export const collectResolved = (
 	ts: typeof TS,
 	service: ExpressionService,
 	program: TS.Program,
-	files = program.getSourceFiles().filter((f) => !f.isDeclarationFile && !f.fileName.includes('/node_modules/')),
+	files = program
+		.getSourceFiles()
+		.filter((f) => !f.isDeclarationFile && !f.fileName.includes('/node_modules/')),
 ) => {
 	const checker = program.getTypeChecker();
 	const items = files.flatMap((sf) =>
-		findExpressions(ts, sf, checker).map((f) => ({ ...f, analysis: service.analyze(f.expression, f.shape, f.expected) })),
+		findExpressions(ts, sf, checker).map((f) => ({
+			...f,
+			analysis: service.analyze(f.expression, f.shape, f.expected),
+		})),
 	);
 	return { entries: lookupEntries(items), reports: reports(ts, items) };
 };

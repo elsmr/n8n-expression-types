@@ -1,5 +1,7 @@
 {
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
-  "js/ts.experimental.useTsgo": false
+	"typescript.tsdk": "node_modules/typescript/lib",
+	"typescript.enablePromptUseWorkspaceTsdk": true,
+	"js/ts.experimental.useTsgo": false,
+	"editor.defaultFormatter": "biomejs.biome",
+	"editor.formatOnSave": true
 }

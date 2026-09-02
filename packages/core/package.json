@@ -3,15 +3,21 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "n8n-expressions": "./dist/cli.js"
+  },
   "exports": {
-    ".": "./index.ts",
-    "./context": "./context.ts",
-    "./service": "./service.ts",
-    "./scan": "./scan.ts",
-    "./globals": "./globals.ts",
-    "./shapes.d.ts": "./shapes.d.ts",
-    "./extensions.d.ts": "./extensions.d.ts",
-    "./lookup-file": "./lookup-file.ts"
+    ".": "./dist/index.js",
+    "./context": "./dist/context.js",
+    "./service": "./dist/service.js",
+    "./scan": "./dist/scan.js",
+    "./globals": "./dist/globals.js",
+    "./lookup-file": "./dist/lookup-file.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "dev": "tsc -p . -w --preserveWatchOutput"
   },
   "dependencies": {
     "@types/luxon": "^3.7.5",

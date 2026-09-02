@@ -1,27 +1,19 @@
 {
-  "compilerOptions": {
-    "strict": true,
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "types": [
-      "node",
-      "n8n-expressions-lookup"
-    ],
-    "plugins": [
-      {
-        "name": "@n8n/expression-ts-plugin"
-      }
-    ]
-  },
-  "include": [
-    "*.ts"
-  ],
-  "exclude": [
-    "_bench*.ts",
-    "_dbg*.ts"
-  ]
+	"compilerOptions": {
+		"strict": true,
+		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"types": ["node"],
+		"plugins": [
+			{
+				"name": "@n8n/expression-ts-plugin"
+			}
+		]
+	},
+	"include": ["*.ts", ".n8n/*.d.ts"],
+	"exclude": ["_bench*.ts", "_dbg*.ts"]
 }

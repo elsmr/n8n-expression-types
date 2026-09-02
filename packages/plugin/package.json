@@ -4,7 +4,8 @@
   "private": true,
   "main": "entry.cjs",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --external:typescript --external:luxon --outfile=dist/index.cjs --log-level=warning"
+    "build": "esbuild src/index.ts --bundle --platform=node --format=cjs --external:typescript --external:luxon --outfile=dist/index.cjs --log-level=warning",
+    "dev": "pnpm build --watch"
   },
   "type": "module",
   "dependencies": {

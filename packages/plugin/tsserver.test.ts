@@ -9,12 +9,29 @@ import { createRequire } from 'node:module';
 const root = path.resolve(import.meta.dirname, '../..');
 const playground = path.join(root, 'playground');
 const file = path.join(playground, 'demo.ts');
-const tsserver = path.join(path.dirname(createRequire(import.meta.url).resolve('typescript')), 'tsserver.js');
+const tsserver = path.join(
+	path.dirname(createRequire(import.meta.url).resolve('typescript')),
+	'tsserver.js',
+);
 const logFile = path.join(root, 'node_modules/.tsserver-test.log');
 
-const srv = spawn(process.execPath, [tsserver, '--globalPlugins', '@n8n/expression-ts-plugin', '--pluginProbeLocations', playground, '--logVerbosity', 'normal', '--logFile', logFile], {
-	stdio: ['pipe', 'pipe', 'inherit'],
-});
+const srv = spawn(
+	process.execPath,
+	[
+		tsserver,
+		'--globalPlugins',
+		'@n8n/expression-ts-plugin',
+		'--pluginProbeLocations',
+		playground,
+		'--logVerbosity',
+		'normal',
+		'--logFile',
+		logFile,
+	],
+	{
+		stdio: ['pipe', 'pipe', 'inherit'],
+	},
+);
 let seq = 0;
 const pending = new Map<number, (msg: any) => void>();
 const events: any[] = [];
@@ -71,10 +88,22 @@ try {
 	console.log('ok  tsserver: hover inside a block is forwarded');
 
 	// geterr answers with events only, no response.
-	srv.stdin.write(JSON.stringify({ seq: ++seq, type: 'request', command: 'geterr', arguments: { files: [file], delay: 0 } }) + '\n');
+	srv.stdin.write(
+		JSON.stringify({
+			seq: ++seq,
+			type: 'request',
+			command: 'geterr',
+			arguments: { files: [file], delay: 0 },
+		}) + '\n',
+	);
 	const diag = await until((e) => e.event === 'semanticDiag' && e.body?.file === file);
-	assert.ok(diag.body.diagnostics.some((d: any) => /\$pageCount/.test(d.text)), 'expression diagnostic missing');
-	console.log(`ok  tsserver: ${diag.body.diagnostics.length} semantic diagnostics including expression ones`);
+	assert.ok(
+		diag.body.diagnostics.some((d: any) => /\$pageCount/.test(d.text)),
+		'expression diagnostic missing',
+	);
+	console.log(
+		`ok  tsserver: ${diag.body.diagnostics.length} semantic diagnostics including expression ones`,
+	);
 
 	const log = readFileSync(logFile, 'utf8');
 	assert.doesNotMatch(log, /Exception on executing command/, 'tsserver logged an exception');

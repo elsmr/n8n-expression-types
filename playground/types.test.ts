@@ -17,21 +17,33 @@ import { paginationSample, sample } from './sample-data.ts';
 
 type Expect<T extends true> = T;
 type ExpectFalse<T extends false> = T;
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+	? true
+	: false;
 type IsAny<T> = 0 extends 1 & T ? true : false;
 
 const lambda = expression(({ $json }) => $json.n * 2, sample);
 
 export type Cases = [
-	Expect<Equal<typeof total, Expr<NodeParameterContext, '={{ $input.all().map((i) => i.json.n).sum() }}'>>>,
+	Expect<
+		Equal<
+			typeof total,
+			Expr<NodeParameterContext, '={{ $input.all().map((i) => i.json.n).sum() }}'>
+		>
+	>,
 	Expect<Equal<typeof badGlobal, InvalidExpr<NodeParameterContext, '={{ $pageCount }}'>>>,
 	Expect<Equal<typeof nextUrl, Expr<HttpPaginationContext, '={{ $response.body.next }}'>>>,
 	Expect<Equal<Resolve<typeof nextUrl, typeof paginationSample>, string>>,
-	Expect<Equal<Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>, N8nResolveError>>,
+	Expect<
+		Equal<
+			Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>,
+			N8nResolveError
+		>
+	>,
 	Expect<Equal<Resolve<typeof badGlobal, typeof sample>, N8nInvalidExpression>>,
 	Expect<Equal<ReturnType<typeof resolve<typeof total, typeof sample>>, number>>,
-	Expect<IsAny<Resolve<typeof loose, {}>>>,                                   // no data: loose stays any
-	Expect<Equal<Resolve<typeof loose, typeof sample>, N8nResolveError>>,       // real data: $json.whatever does not exist
+	Expect<IsAny<Resolve<typeof loose, {}>>>, // no data: loose stays any
+	Expect<Equal<Resolve<typeof loose, typeof sample>, N8nResolveError>>, // real data: $json.whatever does not exist
 	ExpectFalse<Equal<Resolve<typeof loose, typeof sample>, number>>,
 	Expect<Equal<typeof lambda, LambdaExpression<number>>>,
 	Expect<Equal<Expression<string> extends string ? true : false, true>>,

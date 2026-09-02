@@ -1,4 +1,4 @@
-/// <reference path="./shapes.d.ts" />
+/// <reference path="./shapes.d.ts" preserve="true" />
 // String form.
 //
 //   expr('={{ $now.toISO() }}')                   Expr<NodeParameterContext, "={{ $now.toISO() }}">
@@ -37,7 +37,8 @@ declare global {
 type Brand<T, C, E> = { readonly __n8n?: { type: T; context: C; text: E } };
 
 /** Slot declaration: a string that must be an expression yielding T in context C. */
-export type Expression<T = unknown, C extends ContextType = NodeParameterContext> = string & Brand<T, C, string>;
+export type Expression<T = unknown, C extends ContextType = NodeParameterContext> = string &
+	Brand<T, C, string>;
 
 export type ResolvedKey<C extends ContextType, E extends string> = `${ContextName<C>}::${E}`;
 export const resolvedKey = (context: string, expression: string) => `${context}::${expression}`;
@@ -52,14 +53,14 @@ export type Resolved<C extends ContextType, E extends string> = EntryOf<C, E>['l
 /** What expr() returns: the text E declared as an expression in context C. Its type is derived, not shown. */
 export type Expr<C extends ContextType, E extends string> = string & Brand<Resolved<C, E>, C, E>;
 /** Same, when the text is wrong in its context. The plugin or `generate` says why. */
-export type InvalidExpr<C extends ContextType, E extends string> = string & Brand<N8nInvalidExpression, C, E>;
+export type InvalidExpr<C extends ContextType, E extends string> = string &
+	Brand<N8nInvalidExpression, C, E>;
 
-type ExprResult<C extends ContextType, E extends string> =
-	IsAny<Resolved<C, E>> extends true
-		? Expr<C, E>
-		: Resolved<C, E> extends N8nInvalidExpression
-			? InvalidExpr<C, E>
-			: Expr<C, E>;
+type ExprResult<C extends ContextType, E extends string> = IsAny<Resolved<C, E>> extends true
+	? Expr<C, E>
+	: Resolved<C, E> extends N8nInvalidExpression
+		? InvalidExpr<C, E>
+		: Expr<C, E>;
 
 // First pair whose data type is structurally identical to D.
 type Match<Pairs, D> = Pairs extends [[infer K, infer T], ...infer Rest]
@@ -85,19 +86,24 @@ export const expr: ExprFn<NodeParameterContext> & ExprByContext = Object.assign(
 );
 
 type AnyExpr = string & Brand<any, any, any>;
-export type DataFor<C extends ContextType> = Omit<RuntimeTypes, 'context'> & { context?: ContextName<C> };
+export type DataFor<C extends ContextType> = Omit<RuntimeTypes, 'context'> & {
+	context?: ContextName<C>;
+};
 export type ContextOf<X> = X extends Brand<any, infer C extends ContextType, any> ? C : never;
 
 /**
  * The type `X` yields against data `D`, from the generator's record of this exact pairing.
  * Unknown pairing (not generated yet, or D is not portable) falls back to the loose type.
  */
-export type Resolve<X extends AnyExpr, D> =
-	X extends Brand<infer T, infer C extends ContextType, infer E extends string>
-		? [Match<EntryOf<C, E>['strict'], D>] extends [never]
-			? T
-			: Match<EntryOf<C, E>['strict'], D>
-		: never;
+export type Resolve<X extends AnyExpr, D> = X extends Brand<
+	infer T,
+	infer C extends ContextType,
+	infer E extends string
+>
+	? [Match<EntryOf<C, E>['strict'], D>] extends [never]
+		? T
+		: Match<EntryOf<C, E>['strict'], D>
+	: never;
 
 /** Evaluation belongs to n8n's Expression class; this carries the types only. */
 export const resolve = <X extends AnyExpr, D extends DataFor<ContextOf<X>>>(

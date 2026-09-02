@@ -10,7 +10,7 @@ import { buildGlobals, type Json, type RuntimeShape, type RuntimeTypes } from '.
 
 export type Options = {
 	ts: typeof TS;
-	/** Directory holding node_modules (for luxon types), shapes.d.ts and extensions.d.ts. */
+	/** Directory holding shapes.d.ts and extensions.d.ts, with luxon resolvable from it. */
 	root: string;
 };
 
@@ -25,10 +25,20 @@ export type BlockAnalysis = {
 
 /** n8n's own rules, enforced by the sandbox rather than by types (expression-sandboxing.ts, expression.ts). */
 export const SANDBOX_RULES: Array<{ pattern: RegExp; message: string }> = [
-	{ pattern: /\.\s*constructor\b/g, message: "Expression contains invalid constructor function call. n8n rejects any '.constructor' access." },
-	{ pattern: /\b__proto__\b|\.\s*prototype\b/g, message: 'n8n blocks prototype access in expressions.' },
+	{
+		pattern: /\.\s*constructor\b/g,
+		message:
+			"Expression contains invalid constructor function call. n8n rejects any '.constructor' access.",
+	},
+	{
+		pattern: /\b__proto__\b|\.\s*prototype\b/g,
+		message: 'n8n blocks prototype access in expressions.',
+	},
 	{ pattern: /\$(?![\w$]|\s*\()/g, message: 'Cannot access "$" without calling it as a function.' },
-	{ pattern: /\bclass\b[^{]*\bextends\b/g, message: 'Cannot use dynamic class extension due to security concerns.' },
+	{
+		pattern: /\bclass\b[^{]*\bextends\b/g,
+		message: 'Cannot use dynamic class extension due to security concerns.',
+	},
 ];
 
 export type Analysis = {
@@ -110,7 +120,9 @@ export const createExpressionService = ({ ts, root }: Options) => {
 		set(GLOBALS_FILE, buildGlobals(shape));
 		const compiled = compile(expression);
 		const single = !compiled.hasText && compiled.blocks.length === 1;
-		const check = expected ? `\nconst __expected: ${expected} = ${single ? '__r0' : "'' as string"};` : '';
+		const check = expected
+			? `\nconst __expected: ${expected} = ${single ? '__r0' : "'' as string"};`
+			: '';
 		set(EXPR_FILE, compiled.source + check);
 		return compiled;
 	};
@@ -122,25 +134,37 @@ export const createExpressionService = ({ ts, root }: Options) => {
 		const program = service.getProgram()!;
 		const checker = program.getTypeChecker();
 		const sf = program.getSourceFile(EXPR_FILE)!;
-		const diags = [...service.getSyntacticDiagnostics(EXPR_FILE), ...service.getSemanticDiagnostics(EXPR_FILE)];
+		const diags = [
+			...service.getSyntacticDiagnostics(EXPR_FILE),
+			...service.getSemanticDiagnostics(EXPR_FILE),
+		];
 
 		// Find each block's statement by name: a body that is not a single expression would
 		// otherwise shift every later block onto the wrong statement.
 		const declaration = (name: string) =>
 			sf.statements.find(
 				(st): st is TS.VariableStatement =>
-					ts.isVariableStatement(st) && st.declarationList.declarations[0]?.name.getText(sf) === name,
+					ts.isVariableStatement(st) &&
+					st.declarationList.declarations[0]?.name.getText(sf) === name,
 			);
 		const typed = blocks.map((b, i) => {
 			const stmt = declaration(`__r${i}`);
-			const toExpr = (fileOffset: number) => Math.min(Math.max(fileOffset - b.fileStart, 0), b.body.length) + b.start;
+			const toExpr = (fileOffset: number) =>
+				Math.min(Math.max(fileOffset - b.fileStart, 0), b.body.length) + b.start;
 			if (!stmt) {
 				return {
 					body: b.body,
 					start: b.start,
 					end: b.end,
 					type: 'unknown',
-					errors: [{ message: 'A block must contain a single expression.', start: b.start, end: b.end, code: 1109 }],
+					errors: [
+						{
+							message: 'A block must contain a single expression.',
+							start: b.start,
+							end: b.end,
+							code: 1109,
+						},
+					],
 				};
 			}
 			const decl = stmt.declarationList.declarations[0];
@@ -150,7 +174,9 @@ export const createExpressionService = ({ ts, root }: Options) => {
 				ts.TypeFormatFlags.NoTruncation,
 			);
 			const errors = diags
-				.filter((d) => d.start !== undefined && d.start >= stmt.getStart(sf) && d.start <= stmt.getEnd())
+				.filter(
+					(d) => d.start !== undefined && d.start >= stmt.getStart(sf) && d.start <= stmt.getEnd(),
+				)
 				.map((d) => ({
 					message: ts.flattenDiagnosticMessageText(d.messageText, '\n'),
 					start: toExpr(d.start!),
@@ -159,7 +185,12 @@ export const createExpressionService = ({ ts, root }: Options) => {
 				}));
 			for (const rule of SANDBOX_RULES) {
 				for (const m of b.body.matchAll(rule.pattern)) {
-					errors.push({ message: rule.message, start: b.start + m.index, end: b.start + m.index + m[0].length, code: 90001 });
+					errors.push({
+						message: rule.message,
+						start: b.start + m.index,
+						end: b.start + m.index + m[0].length,
+						code: 90001,
+					});
 				}
 			}
 			return { body: b.body, start: b.start, end: b.end, type, errors };
@@ -168,14 +199,23 @@ export const createExpressionService = ({ ts, root }: Options) => {
 		const checkStmt = expected ? declaration('__expected') : undefined;
 		const slotError = checkStmt
 			? diags
-					.filter((d) => d.start !== undefined && d.start >= checkStmt.getStart(sf) && d.start <= checkStmt.getEnd())
+					.filter(
+						(d) =>
+							d.start !== undefined &&
+							d.start >= checkStmt.getStart(sf) &&
+							d.start <= checkStmt.getEnd(),
+					)
 					.map(() => `Expression yields ${type}, slot expects ${expected}.`)[0]
 			: undefined;
 		return { type, blocks: typed, ...(slotError ? { slotError } : {}) };
 	};
 
 	/** `offset` is a cursor position inside `expression`. */
-	const completionsAt = (expression: string, offset: number, shape: RuntimeShape): TS.CompletionEntry[] => {
+	const completionsAt = (
+		expression: string,
+		offset: number,
+		shape: RuntimeShape,
+	): TS.CompletionEntry[] => {
 		const { blocks } = load(expression, shape);
 		const block = blocks.find((b) => offset >= b.start && offset <= b.end);
 		if (!block) return [];
@@ -205,7 +245,9 @@ export const createExpressionService = ({ ts, root }: Options) => {
 			},
 			/** Virtual file span → expression span, clipped to the block it belongs to. */
 			toExpression: (span: TS.TextSpan): TS.TextSpan | undefined => {
-				const b = blocks.find((b) => span.start >= b.fileStart && span.start <= b.fileStart + b.body.length);
+				const b = blocks.find(
+					(b) => span.start >= b.fileStart && span.start <= b.fileStart + b.body.length,
+				);
 				if (!b) return undefined;
 				const start = b.start + (span.start - b.fileStart);
 				return { start, length: Math.min(span.length, b.end - start) };

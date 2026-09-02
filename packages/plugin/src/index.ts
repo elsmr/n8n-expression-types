@@ -3,15 +3,29 @@
 // quick fixes, inlay hints and semantic classifications from the virtual file, with
 // positions mapped back. It adds block and expression types, n8n's sandbox rules, and
 // keeps the lookup that makes resolved types flow in sync while you type. The lookup is a
-// real file in <project>/node_modules/@types (tsserver rejects memory-only roots), added as
-// a root file here so no tsconfig entry is needed in the editor; `generate` writes the same
-// file for plain tsc.
+// real file under <project>/.n8n (tsserver rejects memory-only roots), added as a root
+// file here so no tsconfig entry is needed in the editor; `n8n-expressions generate`
+// writes the same file for plain tsc.
 
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import type TS from 'typescript';
-import { createExpressionService, type Analysis, type RuntimeShape } from '@n8n/expression-types/service';
-import { findExpressions, lookupEntries, renderResolved, type Found } from '@n8n/expression-types/scan';
-import { lookupFile as lookupFileFor, readLookup, writeLookup } from '@n8n/expression-types/lookup-file';
+import {
+	createExpressionService,
+	type Analysis,
+	type RuntimeShape,
+} from '@n8n/expression-types/service';
+import {
+	findExpressions,
+	lookupEntries,
+	renderResolved,
+	type Found,
+} from '@n8n/expression-types/scan';
+import {
+	lookupFile as lookupFileFor,
+	readLookup,
+	writeLookup,
+} from '@n8n/expression-types/lookup-file';
 
 type Item = Found & {
 	analysis: Analysis;
@@ -33,7 +47,9 @@ const init = (modules: { typescript: typeof TS }) => {
 		decorated.add(info.project);
 		const ls = info.languageService;
 		const log = (m: string) => info.project.projectService.logger.info(`[n8n-expression] ${m}`);
-		const root = path.resolve(__dirname, '../../core');
+		const root = path.dirname(
+			createRequire(__filename).resolve('@n8n/expression-types/package.json'),
+		);
 		const projectDir = info.project.getCurrentDirectory();
 		const service = createExpressionService({ ts, root });
 
@@ -47,7 +63,13 @@ const init = (modules: { typescript: typeof TS }) => {
 			if (!program || !sf) return [];
 			const found = findExpressions(ts, sf, program.getTypeChecker());
 			const items: Item[] = found.map((f) => {
-				const resolved = f.kind === 'call' ? found.find((o) => o.kind === 'resolve' && o.expression === f.expression && o.context === f.context) : undefined;
+				const resolved =
+					f.kind === 'call'
+						? found.find(
+								(o) =>
+									o.kind === 'resolve' && o.expression === f.expression && o.context === f.context,
+							)
+						: undefined;
 				const analysis = service.analyze(f.expression, f.shape, f.expected);
 				const hoverShape = resolved?.shape ?? f.shape;
 				const hoverAnalysis = resolved ? service.analyze(f.expression, hoverShape) : analysis;
@@ -57,9 +79,16 @@ const init = (modules: { typescript: typeof TS }) => {
 			return items;
 		};
 		const itemAt = (fileName: string, position: number) =>
-			itemsFor(fileName).find((it) => !it.reportAt && position >= it.textStart && position <= it.textStart + it.expression.length);
+			itemsFor(fileName).find(
+				(it) =>
+					!it.reportAt &&
+					position >= it.textStart &&
+					position <= it.textStart + it.expression.length,
+			);
 		const blockAt = (it: Item, position: number) =>
-			it.analysis.blocks.find((b) => position >= it.textStart + b.start && position <= it.textStart + b.end);
+			it.analysis.blocks.find(
+				(b) => position >= it.textStart + b.start && position <= it.textStart + b.end,
+			);
 
 		const resolvedByFile = new Map<string, Item[]>();
 		const lookupFile = lookupFileFor(projectDir);
@@ -106,7 +135,12 @@ const init = (modules: { typescript: typeof TS }) => {
 			if (!sf) return prior;
 			syncResolved(fileName, itemsFor(fileName));
 			// Same codes as TypeScript's own diagnostics, so they read as ts(2339) in the editor.
-			const diag = (start: number, length: number, messageText: string, code: number): TS.Diagnostic => ({
+			const diag = (
+				start: number,
+				length: number,
+				messageText: string,
+				code: number,
+			): TS.Diagnostic => ({
 				file: sf,
 				start,
 				length,
@@ -119,13 +153,24 @@ const init = (modules: { typescript: typeof TS }) => {
 				// resolve() re-checks a literal declared elsewhere: report at the call.
 				if (it.reportAt) {
 					return it.analysis.blocks.flatMap((b) =>
-						b.errors.map((e) => diag(it.reportAt!.start, it.reportAt!.length, `${e.message} (in '${it.expression}' against this data)`, e.code)),
+						b.errors.map((e) =>
+							diag(
+								it.reportAt!.start,
+								it.reportAt!.length,
+								`${e.message} (in '${it.expression}' against this data)`,
+								e.code,
+							),
+						),
 					);
 				}
 				const inBlocks = it.analysis.blocks.flatMap((b) =>
-					b.errors.map((e) => diag(it.textStart + e.start, Math.max(e.end - e.start, 1), e.message, e.code)),
+					b.errors.map((e) =>
+						diag(it.textStart + e.start, Math.max(e.end - e.start, 1), e.message, e.code),
+					),
 				);
-				const slot = it.analysis.slotError ? [diag(it.node.getStart(), it.node.getWidth(), it.analysis.slotError, 2322)] : [];
+				const slot = it.analysis.slotError
+					? [diag(it.node.getStart(), it.node.getWidth(), it.analysis.slotError, 2322)]
+					: [];
 				return [...inBlocks, ...slot];
 			});
 			return [...prior, ...extra];
@@ -138,15 +183,22 @@ const init = (modules: { typescript: typeof TS }) => {
 			const m = /\b(?:Expr|InvalidExpr)<(\w+)Context, "((?:[^"\\]|\\.)*)">/.exec(shown);
 			if (!prior || !m) return prior;
 			const text = JSON.parse(`"${m[2]}"`) as string;
-			const sites = [...resolvedByFile.values()].flat().filter((i) => i.kind === 'resolve' && i.expression === text);
-			const loose = [...resolvedByFile.values()].flat().find((i) => i.kind === 'call' && i.expression === text);
+			const sites = [...resolvedByFile.values()]
+				.flat()
+				.filter((i) => i.kind === 'resolve' && i.expression === text);
+			const loose = [...resolvedByFile.values()]
+				.flat()
+				.find((i) => i.kind === 'call' && i.expression === text);
 			const types = [...new Set(sites.map((s) => s.analysis.type))];
 			const summary = sites.length
 				? `Resolves to \`${types.join(' | ')}\` against ${sites.length} data set${sites.length === 1 ? '' : 's'}.`
 				: loose && loose.analysis.type !== 'any'
 					? `Evaluates to \`${loose.analysis.type}\`. Not resolved against data.`
 					: 'Not resolved against data; the type depends on runtime input.';
-			return { ...prior, documentation: [...(prior.documentation ?? []), { text: summary, kind: 'text' }] };
+			return {
+				...prior,
+				documentation: [...(prior.documentation ?? []), { text: summary, kind: 'text' }],
+			};
 		};
 
 		// Inside a block: TypeScript's own quick info for the token. On the {{ }} delimiters:
@@ -157,7 +209,12 @@ const init = (modules: { typescript: typeof TS }) => {
 			const offset = position - it.textStart;
 			const v = service.virtual(it.expression, it.hoverShape);
 			// Styled like TypeScript's own "(kind) name: type" hovers.
-			const info = (label: string, name: string, type: string, span: TS.TextSpan): TS.QuickInfo => ({
+			const info = (
+				label: string,
+				name: string,
+				type: string,
+				span: TS.TextSpan,
+			): TS.QuickInfo => ({
 				kind: ts.ScriptElementKind.string,
 				kindModifiers: '',
 				textSpan: span,
@@ -172,24 +229,38 @@ const init = (modules: { typescript: typeof TS }) => {
 					{ text: type, kind: 'keyword' },
 				],
 			});
-			const analysed = (b: { start: number }) => it.hoverAnalysis.blocks.find((a) => a.start === b.start);
+			const analysed = (b: { start: number }) =>
+				it.hoverAnalysis.blocks.find((a) => a.start === b.start);
 
 			const block = v.blockAt(offset);
 			if (block) {
 				const pos = v.toFile(offset)!;
 				const inner = v.languageService.getQuickInfoAtPosition(v.fileName, pos);
 				const span = inner && v.toExpression(inner.textSpan);
-				if (inner && span) return { ...inner, textSpan: { start: it.textStart + span.start, length: span.length } };
+				if (inner && span)
+					return { ...inner, textSpan: { start: it.textStart + span.start, length: span.length } };
 				const a = analysed(block);
-				return info('block', `{{ ${block.body.trim()} }}`, a?.type ?? 'unknown', { start: it.textStart + block.start - 2, length: block.body.length + 4 });
+				return info('block', `{{ ${block.body.trim()} }}`, a?.type ?? 'unknown', {
+					start: it.textStart + block.start - 2,
+					length: block.body.length + 4,
+				});
 			}
 			// On the delimiters themselves: the block's result type.
-			const delimited = v.blocks.find((b) => (offset >= b.start - 2 && offset < b.start) || (offset > b.end && offset <= b.end + 2));
+			const delimited = v.blocks.find(
+				(b) =>
+					(offset >= b.start - 2 && offset < b.start) || (offset > b.end && offset <= b.end + 2),
+			);
 			if (delimited) {
 				const a = analysed(delimited);
-				return info('block', `{{ ${delimited.body.trim()} }}`, a?.type ?? 'unknown', { start: it.textStart + delimited.start - 2, length: delimited.body.length + 4 });
+				return info('block', `{{ ${delimited.body.trim()} }}`, a?.type ?? 'unknown', {
+					start: it.textStart + delimited.start - 2,
+					length: delimited.body.length + 4,
+				});
 			}
-			return info('expression', it.context, it.hoverAnalysis.type, { start: it.node.getStart(), length: it.node.getWidth() });
+			return info('expression', it.context, it.hoverAnalysis.type, {
+				start: it.node.getStart(),
+				length: it.node.getWidth(),
+			});
 		};
 
 		// Forwarded to the virtual file when the cursor is inside a block.
@@ -214,39 +285,100 @@ const init = (modules: { typescript: typeof TS }) => {
 					const help = v.languageService.getSignatureHelpItems(v.fileName, pos, options);
 					const span = help && v.toExpression(help.applicableSpan);
 					const it = itemAt(fileName, position)!;
-					return help && span ? { ...help, applicableSpan: { start: it.textStart + span.start, length: span.length } } : undefined;
+					return help && span
+						? { ...help, applicableSpan: { start: it.textStart + span.start, length: span.length } }
+						: undefined;
 				},
 				() => ls.getSignatureHelpItems(fileName, position, options),
 			);
 
-		proxy.getCompletionEntryDetails = (fileName, position, entryName, formatOptions, source, preferences, data) =>
+		proxy.getCompletionEntryDetails = (
+			fileName,
+			position,
+			entryName,
+			formatOptions,
+			source,
+			preferences,
+			data,
+		) =>
 			forward(
 				fileName,
 				position,
-				(v, pos) => v.languageService.getCompletionEntryDetails(v.fileName, pos, entryName, formatOptions, source, preferences, data),
-				() => ls.getCompletionEntryDetails(fileName, position, entryName, formatOptions, source, preferences, data),
+				(v, pos) =>
+					v.languageService.getCompletionEntryDetails(
+						v.fileName,
+						pos,
+						entryName,
+						formatOptions,
+						source,
+						preferences,
+						data,
+					),
+				() =>
+					ls.getCompletionEntryDetails(
+						fileName,
+						position,
+						entryName,
+						formatOptions,
+						source,
+						preferences,
+						data,
+					),
 			);
 
 		// Quick fixes ("Change spelling to 'toUpperCase'") from the virtual file, mapped back.
-		proxy.getCodeFixesAtPosition = (fileName, start, end, errorCodes, formatOptions, preferences) => {
-			const prior = ls.getCodeFixesAtPosition(fileName, start, end, errorCodes, formatOptions, preferences);
+		proxy.getCodeFixesAtPosition = (
+			fileName,
+			start,
+			end,
+			errorCodes,
+			formatOptions,
+			preferences,
+		) => {
+			const prior = ls.getCodeFixesAtPosition(
+				fileName,
+				start,
+				end,
+				errorCodes,
+				formatOptions,
+				preferences,
+			);
 			const it = itemAt(fileName, start);
 			if (!it || it.reportAt) return prior;
 			const v = service.virtual(it.expression, it.hoverShape);
 			const from = v.toFile(start - it.textStart);
 			const to = v.toFile(end - it.textStart);
 			if (from === undefined || to === undefined) return prior;
-			const fixes = v.languageService.getCodeFixesAtPosition(v.fileName, from, to, errorCodes, formatOptions, preferences);
+			const fixes = v.languageService.getCodeFixesAtPosition(
+				v.fileName,
+				from,
+				to,
+				errorCodes,
+				formatOptions,
+				preferences,
+			);
 			const mapped = fixes.flatMap((fix) => {
 				const changes = fix.changes.map((c) => ({
 					fileName,
 					textChanges: c.textChanges.map((tc) => {
 						const span = v.toExpression(tc.span);
-						return span ? { ...tc, span: { start: it.textStart + span.start, length: span.length } } : undefined;
+						return span
+							? { ...tc, span: { start: it.textStart + span.start, length: span.length } }
+							: undefined;
 					}),
 				}));
 				if (changes.some((c) => c.textChanges.some((tc) => tc === undefined))) return [];
-				return [{ ...fix, changes: changes.map((c) => ({ ...c, textChanges: c.textChanges.filter((tc) => tc !== undefined) })), fixAllDescription: undefined, fixId: undefined }];
+				return [
+					{
+						...fix,
+						changes: changes.map((c) => ({
+							...c,
+							textChanges: c.textChanges.filter((tc) => tc !== undefined),
+						})),
+						fixAllDescription: undefined,
+						fixId: undefined,
+					},
+				];
 			});
 			return [...prior, ...mapped];
 		};
@@ -254,7 +386,8 @@ const init = (modules: { typescript: typeof TS }) => {
 		proxy.getCompletionsAtPosition = (fileName, position, options, formatting) => {
 			const it = itemAt(fileName, position);
 			const block = it && blockAt(it, position);
-			if (!it || !block) return ls.getCompletionsAtPosition(fileName, position, options, formatting);
+			if (!it || !block)
+				return ls.getCompletionsAtPosition(fileName, position, options, formatting);
 			const entries = service.completionsAt(it.expression, position - it.textStart, it.hoverShape);
 			return {
 				isGlobalCompletion: false,
@@ -267,7 +400,10 @@ const init = (modules: { typescript: typeof TS }) => {
 		proxy.provideInlayHints = (fileName, span, preferences) => {
 			const prior = ls.provideInlayHints(fileName, span, preferences);
 			const visible = itemsFor(fileName).filter(
-				(it) => !it.reportAt && it.node.getEnd() >= span.start && it.node.getStart() <= span.start + span.length,
+				(it) =>
+					!it.reportAt &&
+					it.node.getEnd() >= span.start &&
+					it.node.getStart() <= span.start + span.length,
 			);
 			const typeHints: TS.InlayHint[] = visible.map((it) => ({
 				text: `: ${it.hoverAnalysis.type}`,
@@ -280,7 +416,11 @@ const init = (modules: { typescript: typeof TS }) => {
 				const v = service.virtual(it.expression, it.hoverShape);
 				return v.blocks.flatMap((b) =>
 					v.languageService
-						.provideInlayHints(v.fileName, { start: b.fileStart, length: b.body.length }, preferences)
+						.provideInlayHints(
+							v.fileName,
+							{ start: b.fileStart, length: b.body.length },
+							preferences,
+						)
 						.map((h) => ({ ...h, position: it.textStart + b.start + (h.position - b.fileStart) })),
 				);
 			});
@@ -292,12 +432,25 @@ const init = (modules: { typescript: typeof TS }) => {
 			const prior = ls.getEncodedSemanticClassifications(fileName, span, format);
 			const spans = [...prior.spans];
 			for (const it of itemsFor(fileName)) {
-				if (it.reportAt || it.node.getEnd() < span.start || it.node.getStart() > span.start + span.length) continue;
+				if (
+					it.reportAt ||
+					it.node.getEnd() < span.start ||
+					it.node.getStart() > span.start + span.length
+				)
+					continue;
 				const v = service.virtual(it.expression, it.hoverShape);
 				for (const b of v.blocks) {
-					const inner = v.languageService.getEncodedSemanticClassifications(v.fileName, { start: b.fileStart, length: b.body.length }, format);
+					const inner = v.languageService.getEncodedSemanticClassifications(
+						v.fileName,
+						{ start: b.fileStart, length: b.body.length },
+						format,
+					);
 					for (let i = 0; i + 2 < inner.spans.length; i += 3) {
-						spans.push(it.textStart + b.start + (inner.spans[i] - b.fileStart), inner.spans[i + 1], inner.spans[i + 2]);
+						spans.push(
+							it.textStart + b.start + (inner.spans[i] - b.fileStart),
+							inner.spans[i + 1],
+							inner.spans[i + 2],
+						);
 					}
 				}
 			}

@@ -7,3 +7,5 @@ ignoredBuiltDependencies:
   - isolated-vm
   - "@vscode/vsce-sign"
   - keytar
+allowBuilds:
+  '@biomejs/biome': true
