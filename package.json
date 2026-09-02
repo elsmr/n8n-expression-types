@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "demo": "tsx demo.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "playground": "tsx gen-playground.ts"
   },
   "devDependencies": {
     "@types/luxon": "^3.7.5",

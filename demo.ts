@@ -1,22 +1,7 @@
-import { analyze, completionsAt, globalsFor, type RuntimeTypes } from './service.ts';
+import { analyze, completionsAt, globalsFor } from './service.ts';
+import { runtime } from './example-runtime.ts';
 
-// Runtime shapes normally come from the execution data of the previous run
-// (the same source editor-ui's dynamicTypes.ts reads). Here they are inline.
-const runtime: RuntimeTypes = {
-	input: {
-		json: { test: 'hello', n: 3, tags: ['a', 'b'], user: { name: 'Ada', emails: ['ada@example.com'] }, nothing: null },
-		binaryKeys: ['data'],
-	},
-	nodes: {
-		Webhook: {
-			json: { headers: { host: 'x' }, body: { orderId: 42 } },
-			params: { path: 'orders', httpMethod: 'POST' },
-		},
-		'Edit Fields': { json: { total: 9.5 }, binaryKeys: ['invoice'] },
-	},
-	parameters: { url: 'https://example.com', options: { timeout: 3000 } },
-	vars: ['apiKey', 'region'],
-};
+
 
 const show = (expression: string) => {
 	const a = analyze(expression, runtime);
