@@ -12,7 +12,13 @@ pnpm typecheck    # root + playground with plain tsc
 ```
 
 Open the folder in VS Code and accept "Use workspace TypeScript version" (the plugin
-only loads with the workspace `typescript`). Then open `playground/strings.ts` and
+only loads with the workspace `typescript`).
+
+TypeScript is pinned to 6.x on purpose. `typescript@7` (latest) is the Go compiler: its npm
+package has no `createLanguageService`, no `ts.server`, and no plugin model, only an
+`unstable` API. Everything here needs the JS language service, so 6.0.3 is the newest
+usable release. VS Code 1.135 bundles 6.0.3 as well; `.vscode/settings.json` keeps the
+native preview (`tsgo`) off for this workspace. Then open `playground/strings.ts` and
 `playground/lambda.ts`.
 
 ## Two forms
