@@ -45,9 +45,10 @@ const bad  = expr('={{ $pageCount }}');                           // InvalidExpr
 ```
 
 **`resolve()` and `Resolve<>` are where data enters.** The expression is checked against
-the data's type, and the result type is specific to that pairing. Nothing is generated on
-disk: the plugin injects the lookup into the program while you type, and `pnpm check`
-does the same for CI.
+the data's type, and the result type is specific to that pairing. The lookup behind it is
+a types package under the project's `node_modules`, written by the plugin while you type
+and by `generate` before `tsc` in CI, the way `prisma generate` works. Plain `tsc`, no
+wrapper, nothing in the source tree.
 
 ```ts
 const url: string = resolve(next, paginationSample);
@@ -75,15 +76,16 @@ flowchart LR
   shape --> vf[virtual TS file per expression<br/>+ globals for the context<br/>+ extensions.d.ts]
   vf --> ls[TypeScript language service]
   ls --> plugin[tsserver plugin: diagnostics, hover, completions, fixes]
-  ls --> check[check: tsc wrapper for CI, lookup injected + expression report]
+  ls --> gen[generate: lookup under node_modules/@types + expression report; then plain tsc]
 ```
 
 Each `{{ }}` body becomes `const __r0 = (<body>);` in a virtual file next to ambient
 declarations for the context: `$json`, `$input`, `$('Node')`, `$now`, and the n8n
 extension methods. The checker does the rest. TypeScript cannot parse a string at the
 type level, so result types reach the program through a lookup interface keyed by context
-and text. The plugin serves it to tsserver from memory as an extra root file; `pnpm check`
-wraps `tsc` the way `vue-tsc` does and injects the same. No file is generated.
+and text, written to `node_modules/@types/n8n-expressions-lookup`. tsc includes that
+automatically; projects that set `types` add the name once. The plugin also adds it as a
+root file, so the editor needs no config at all.
 
 Grounded in n8n's code: the globals per context come from `workflow-data-proxy.ts`,
 `get-additional-keys.ts`, `routing-node.ts` and `pagination.ts`; `extensions.d.ts` is
@@ -116,8 +118,8 @@ the moment it is passed to `resolve()`.
 
 ```sh
 pnpm test         # plugin behaviour, headless
-pnpm typecheck    # core, plugin, then `pnpm check` on the playground
-pnpm check        # tsc with the lookup injected + expression diagnostics; the CI command
+pnpm typecheck    # core, plugin, generate, then plain tsc on the playground
+pnpm generate     # write the lookup + report expression diagnostics; run before tsc in CI
 pnpm drift        # n8n-workflow globals vs declared layers
 ```
 

@@ -33,7 +33,7 @@ __export(index_exports, {
   default: () => index_default
 });
 module.exports = __toCommonJS(index_exports);
-var import_node_path = __toESM(require("node:path"), 1);
+var import_node_path2 = __toESM(require("node:path"), 1);
 
 // ../core/globals.ts
 var registry = /* @__PURE__ */ new Map();
@@ -646,6 +646,27 @@ var lookupEntries = (items) => {
   return out;
 };
 
+// ../core/lookup-file.ts
+var import_node_fs = require("node:fs");
+var import_node_path = __toESM(require("node:path"), 1);
+var LOOKUP_PACKAGE = "n8n-expressions-lookup";
+var lookupFile = (projectDir) => import_node_path.default.join(projectDir, "node_modules/@types", LOOKUP_PACKAGE, "index.d.ts");
+var readLookup = (projectDir) => {
+  const file = lookupFile(projectDir);
+  return (0, import_node_fs.existsSync)(file) ? (0, import_node_fs.readFileSync)(file, "utf8") : void 0;
+};
+var writeLookup = (projectDir, content) => {
+  const file = lookupFile(projectDir);
+  if (readLookup(projectDir) === content) return false;
+  (0, import_node_fs.mkdirSync)(import_node_path.default.dirname(file), { recursive: true });
+  (0, import_node_fs.writeFileSync)(
+    import_node_path.default.join(import_node_path.default.dirname(file), "package.json"),
+    JSON.stringify({ name: `@types/${LOOKUP_PACKAGE}`, version: "0.0.0", types: "index.d.ts" }, null, 2) + "\n"
+  );
+  (0, import_node_fs.writeFileSync)(file, content);
+  return true;
+};
+
 // src/index.ts
 var decorated = /* @__PURE__ */ new WeakSet();
 var init = (modules) => {
@@ -655,7 +676,7 @@ var init = (modules) => {
     decorated.add(info.project);
     const ls = info.languageService;
     const log = (m) => info.project.projectService.logger.info(`[n8n-expression] ${m}`);
-    const root = import_node_path.default.resolve(__dirname, "../../core");
+    const root = import_node_path2.default.resolve(__dirname, "../../core");
     const projectDir = info.project.getCurrentDirectory();
     const service = createExpressionService({ ts, root });
     const cache = /* @__PURE__ */ new Map();
@@ -680,31 +701,30 @@ var init = (modules) => {
     const itemAt = (fileName, position) => itemsFor(fileName).find((it) => !it.reportAt && position >= it.textStart && position <= it.textStart + it.expression.length);
     const blockAt = (it, position) => it.analysis.blocks.find((b) => position >= it.textStart + b.start && position <= it.textStart + b.end);
     const resolvedByFile = /* @__PURE__ */ new Map();
-    const resolvedFile = import_node_path.default.join(projectDir, "__n8n-expressions-lookup__.d.ts");
-    let resolvedText = renderResolved(/* @__PURE__ */ new Map());
-    let resolvedVersion = 1;
+    const lookupFile2 = lookupFile(projectDir);
+    let lookupText = readLookup(projectDir) ?? "";
+    if (!lookupText) {
+      lookupText = renderResolved(/* @__PURE__ */ new Map());
+      writeLookup(projectDir, lookupText);
+    }
     const lsHost = info.languageServiceHost;
     const origFileNames = lsHost.getScriptFileNames.bind(lsHost);
-    const origVersion = lsHost.getScriptVersion.bind(lsHost);
-    const origSnapshot = lsHost.getScriptSnapshot.bind(lsHost);
     lsHost.getScriptFileNames = () => {
       const names = origFileNames();
-      return names.includes(resolvedFile) ? names : [resolvedFile, ...names];
+      return names.includes(lookupFile2) ? names : [lookupFile2, ...names];
     };
-    lsHost.getScriptVersion = (f) => f === resolvedFile ? String(resolvedVersion) : origVersion(f);
-    lsHost.getScriptSnapshot = (f) => f === resolvedFile ? ts.ScriptSnapshot.fromString(resolvedText) : origSnapshot(f);
     const syncResolved = (fileName, items) => {
       const mine = items.filter((i) => i.kind !== "slot");
       if (mine.length === 0 && !resolvedByFile.has(fileName)) return;
       resolvedByFile.set(fileName, mine);
       const next = renderResolved(lookupEntries([...resolvedByFile.values()].flat()));
-      if (next === resolvedText) return;
-      resolvedText = next;
-      resolvedVersion++;
-      const project = info.project;
-      project.markAsDirty?.();
-      project.refreshDiagnostics?.();
-      log(`lookup updated (${resolvedVersion})`);
+      if (next === lookupText) return;
+      lookupText = next;
+      writeLookup(projectDir, next);
+      info.project.projectService.getScriptInfo(lookupFile2)?.reloadFromFile();
+      info.project.markAsDirty?.();
+      info.project.refreshDiagnostics();
+      log("lookup updated");
     };
     const proxy = /* @__PURE__ */ Object.create(null);
     for (const k of Object.keys(ls)) {

@@ -10,7 +10,8 @@
     "./scan": "./scan.ts",
     "./globals": "./globals.ts",
     "./shapes.d.ts": "./shapes.d.ts",
-    "./extensions.d.ts": "./extensions.d.ts"
+    "./extensions.d.ts": "./extensions.d.ts",
+    "./lookup-file": "./lookup-file.ts"
   },
   "dependencies": {
     "@types/luxon": "^3.7.5",

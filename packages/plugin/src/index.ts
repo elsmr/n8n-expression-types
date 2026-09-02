@@ -2,14 +2,16 @@
 // Inside a {{ }} block it forwards TypeScript's own hover, completions, signature help,
 // quick fixes, inlay hints and semantic classifications from the virtual file, with
 // positions mapped back. It adds block and expression types, n8n's sandbox rules, and
-// keeps the lookup that makes resolved types flow in sync while you type. The lookup is
-// served to the host program from memory as an extra root file (the technique Volar uses);
-// nothing is written to disk. CI gets the same through check.ts, a tsc wrapper.
+// keeps the lookup that makes resolved types flow in sync while you type. The lookup is a
+// real file in <project>/node_modules/@types (tsserver rejects memory-only roots), added as
+// a root file here so no tsconfig entry is needed in the editor; `generate` writes the same
+// file for plain tsc.
 
 import path from 'node:path';
 import type TS from 'typescript';
 import { createExpressionService, type Analysis, type RuntimeShape } from '@n8n/expression-types/service';
 import { findExpressions, lookupEntries, renderResolved, type Found } from '@n8n/expression-types/scan';
+import { lookupFile as lookupFileFor, readLookup, writeLookup } from '@n8n/expression-types/lookup-file';
 
 type Item = Found & {
 	analysis: Analysis;
@@ -60,22 +62,19 @@ const init = (modules: { typescript: typeof TS }) => {
 			it.analysis.blocks.find((b) => position >= it.textStart + b.start && position <= it.textStart + b.end);
 
 		const resolvedByFile = new Map<string, Item[]>();
-		const resolvedFile = path.join(projectDir, '__n8n-expressions-lookup__.d.ts');
-		let resolvedText = renderResolved(new Map());
-		let resolvedVersion = 1;
+		const lookupFile = lookupFileFor(projectDir);
+		let lookupText = readLookup(projectDir) ?? '';
+		if (!lookupText) {
+			lookupText = renderResolved(new Map());
+			writeLookup(projectDir, lookupText);
+		}
 
-		// The host program sees the lookup as a root file served from memory, so no tsconfig
-		// entry is needed and a change is a version bump rather than a disk round-trip.
 		const lsHost = info.languageServiceHost;
 		const origFileNames = lsHost.getScriptFileNames.bind(lsHost);
-		const origVersion = lsHost.getScriptVersion.bind(lsHost);
-		const origSnapshot = lsHost.getScriptSnapshot.bind(lsHost);
 		lsHost.getScriptFileNames = () => {
 			const names = origFileNames();
-			return names.includes(resolvedFile) ? names : [resolvedFile, ...names];
+			return names.includes(lookupFile) ? names : [lookupFile, ...names];
 		};
-		lsHost.getScriptVersion = (f) => (f === resolvedFile ? String(resolvedVersion) : origVersion(f));
-		lsHost.getScriptSnapshot = (f) => (f === resolvedFile ? ts.ScriptSnapshot.fromString(resolvedText) : origSnapshot(f));
 
 		const syncResolved = (fileName: string, items: Item[]) => {
 			const mine = items.filter((i) => i.kind !== 'slot');
@@ -83,13 +82,15 @@ const init = (modules: { typescript: typeof TS }) => {
 			resolvedByFile.set(fileName, mine);
 			// Recompute across files so a resolve() in one file types an expr() in another.
 			const next = renderResolved(lookupEntries([...resolvedByFile.values()].flat()));
-			if (next === resolvedText) return;
-			resolvedText = next;
-			resolvedVersion++;
-			const project = info.project as { markAsDirty?: () => void; refreshDiagnostics?: () => void };
-			project.markAsDirty?.();
-			project.refreshDiagnostics?.();
-			log(`lookup updated (${resolvedVersion})`);
+			if (next === lookupText) return;
+			lookupText = next;
+			writeLookup(projectDir, next);
+			// Nothing watches this file, so tell tsserver ourselves.
+			info.project.projectService.getScriptInfo(lookupFile)?.reloadFromFile();
+			// markAsDirty is internal API; without it the program keeps the old lookup until the next edit.
+			(info.project as unknown as { markAsDirty?: () => void }).markAsDirty?.();
+			info.project.refreshDiagnostics();
+			log('lookup updated');
 		};
 
 		const proxy: TS.LanguageService = Object.create(null);

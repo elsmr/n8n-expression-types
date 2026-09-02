@@ -16,10 +16,13 @@ signature help come out of the checker unchanged, with positions mapped back int
 literal.
 
 Result types reach the host program through a global interface, `N8nResolvedTypes`,
-keyed by `context::text`. The plugin serves it to tsserver from memory as an extra root
-file, the technique Volar uses; `check.ts` wraps `tsc` the way `vue-tsc` does and injects
-the same for CI. Nothing is generated on disk. Each distinct data type appears once in the
-lookup as a local alias.
+keyed by `context::text`, in a types package the tooling writes under the project's
+`node_modules/@types`. `tsc` includes `@types/*` automatically; projects with an explicit
+`types` list (n8n's shared tsconfigs) add the name once. `generate` writes it before `tsc`
+in CI, the Prisma model; the plugin writes the same file while you type and adds it as a
+root so the editor needs no config. A memory-only root was tried and rejected: tsserver
+requires a real file behind every source file. A `tsc` wrapper like `vue-tsc` was rejected
+in favour of plain `tsc`. Each distinct data type appears once in the lookup as a local alias.
 
 ## Decisions
 
@@ -44,7 +47,7 @@ another. A site that fails is reported at that site and does not poison the othe
 **Two error types, no messages in generics.** `N8nInvalidExpression`: the text is wrong
 in its context, whatever the data. `N8nResolveError`: the expression is fine, this data
 does not fit. Both are unassignable. The messages are diagnostics, from the plugin in the
-editor and from `check.ts` in CI.
+editor and from `generate` in CI.
 
 **Loose by default, strict against data.** A runtime hole with no shape is `any`, so
 `$json.anything.goes()` passes. Globals, contexts and methods on known types are still
@@ -71,9 +74,10 @@ that yields `string` is reported, when the slot type spells out primitives.
 - VS Code extension only: works in one editor; the plugin works in any tsserver editor and
   the extension bundles it.
 - Default context from `runtime.json`: silent wrong answers.
-- A generated `.d.ts` on disk, visible (gql.tada, TanStack Router) or under
-  `node_modules/@types` (Prisma-style): works, but the in-memory root file plus a tsc
-  wrapper needs neither a file nor a tsconfig entry.
+- A visible generated `.d.ts` in the source tree (gql.tada, TanStack Router): works, but
+  it is noise in review and in the tree; `node_modules/@types` is invisible and per project.
+- Memory-only root file in the plugin plus a `tsc` wrapper for CI: tsserver rejects roots
+  without a file, and a wrapper CLI was not wanted.
 
 ## Cost
 
@@ -111,8 +115,8 @@ Next for scale: batch all blocks of a file into one virtual file per shape. Meas
 - Sample-derived types produce false errors for fields the sample lacks; the loose default
   limits this to sites that pass data.
 - The lambda form serialises with `fn.toString()` and does not detect free variables.
-- `check.ts` builds the program twice (scan, then with the lookup); the second reuses
-  the first's source files, so it costs one extra checker pass.
+- `generate` builds the project's program once to scan it; on `nodes-base` that is the
+  4.5 s TypeScript itself needs, plus the expression analysis.
 - 4% of `nodes-base` literals are concatenation fragments (`'={{ ... ' + x`) with no
   complete block; they are typed as their literal text.
 - `$parameter` ignores `displayOptions` and versions. `$self` is loose.

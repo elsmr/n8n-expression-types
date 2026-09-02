@@ -152,7 +152,7 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
 /**
  * Type text for the lookup: the value type, or an error type. Without data an error means
  * the text is invalid; against data it means the data does not fit. The messages
- * themselves are diagnostics (plugin, check.ts), not types.
+ * themselves are diagnostics (plugin, generate), not types.
  */
 export const resolvedType = (a: Analysis, against: 'definition' | 'data' = 'definition'): string => {
 	const failed = a.blocks.some((b) => b.errors.length > 0) || !!a.slotError;

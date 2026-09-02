@@ -13,6 +13,7 @@
   },
   "include": [
     "src/*.ts",
-    "plugin.test.ts"
+    "plugin.test.ts",
+    "tsserver.test.ts"
   ]
 }

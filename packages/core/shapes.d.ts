@@ -88,7 +88,7 @@ declare global {
 		[key: string]: any;
 	}
 
-	/** The expression text is wrong on its own, in its context. The plugin or check.ts says why. */
+	/** The expression text is wrong on its own, in its context. The plugin or `generate` says why. */
 	interface N8nInvalidExpression {
 		readonly __n8nInvalidExpression: true;
 	}

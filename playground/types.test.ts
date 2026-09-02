@@ -1,6 +1,6 @@
 // Type tests, no library. Each entry fails to compile when the typing regresses. They run
-// through `pnpm check`, which also reports the diagnostics that are not types: slot
-// mismatches, $parameter typos, sandbox rules.
+// through `pnpm typecheck`; `pnpm generate` reports the diagnostics that are not types:
+// slot mismatches, $parameter typos, sandbox rules.
 import {
 	expression,
 	resolve,
