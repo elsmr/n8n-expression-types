@@ -1,3 +1,5 @@
+// Historical: the first attempt, a pure type-level resolver for $json paths only. Kept as a
+// reference for what the type system can do alone. Not used by the packages.
 // Type-level resolver for n8n expressions against a typed $json.
 // Paste into the TypeScript playground; hover the `Check*` types or read the errors.
 

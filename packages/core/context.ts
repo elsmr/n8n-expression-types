@@ -1,9 +1,12 @@
 // Lambda form: the expression is TypeScript instead of a string, so the checker
-// types and validates it natively. `ExpressionContext<R>` mirrors globals.ts at the
+// types and validates it natively. `LambdaContext<R>` mirrors globals.ts at the
 // type level, derived from the runtime sample `R`.
 //
 //   expression(({ $json, $ }) => $json.n * $('Webhook').item.json.body.orderId, runtime)
-//     // Expression<number>, serialises to "={{ $json.n * $('Webhook').item.json.body.orderId }}"
+//     // serialises to "={{ $json.n * $('Webhook').item.json.body.orderId }}"
+//
+// Prototype: a closure over a local variable compiles and breaks at runtime, because the
+// body is serialised with fn.toString(). Needs an AST rule before real use.
 
 import type { Json, NodeRuntime, RuntimeTypes } from './globals.ts';
 

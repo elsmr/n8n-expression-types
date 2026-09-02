@@ -1,11 +1,15 @@
+// The service API on its own, no editor: per-block types, errors, completions, contexts.
+// Run: pnpm demo
+import { createRequire } from 'node:module';
+import path from 'node:path';
 import ts from 'typescript';
-import { createExpressionService } from './service.ts';
-import { runtime } from './example-runtime.ts';
-import { shapeFromValues, emptyShape } from './globals.ts';
+import { emptyShape, shapeFromValues } from '@n8n/expression-types';
+import { createExpressionService } from '@n8n/expression-types/service';
+import { runtime } from './runtime.ts';
 
+const root = path.dirname(createRequire(import.meta.url).resolve('@n8n/expression-types/service'));
+const { analyze, completionsAt } = createExpressionService({ ts, root });
 const shape = shapeFromValues(runtime);
-
-const { analyze, completionsAt, globalsFor } = createExpressionService({ ts, root: import.meta.dirname });
 
 const show = (expression: string, s = shape) => {
 	const a = analyze(expression, s);
@@ -23,35 +27,19 @@ const complete = (expression: string, marker = '|') => {
 	console.log(`\n${expression}\n  -> ${names.slice(0, 14).join(', ')}${names.length > 14 ? ', ...' : ''}`);
 };
 
-console.log('--- injected runtime types ---');
+console.log('--- against a runtime sample ---');
 show('={{ $json.user.emails.first().isEmail() }}');
-show('={{ $binary.data.mimeType }}');
 show("={{ $('Webhook').item.json.body.orderId }}");
-show("={{ $('Webhook').params.httpMethod }}");
 show("={{ $('Edit Fields').first().binary.invoice.fileName }}");
-show("={{ $('Unknown node').item.json.whatever }}");
 show('={{ $input.all().map((i) => i.json.n).sum() }}');
-show('={{ $parameter.options.timeout }}');
-show('={{ $vars.apiKey }}');
-show('={{ $vars.nope }}');
-
-console.log('\n--- extension methods (extensions.d.ts) ---');
-show('={{ $json.test.toTitleCase().toSnakeCase() }}');
-show('={{ $json.tags.randomItem() }}');
-show('={{ $json.n.round(1).toBoolean() }}');
 show('={{ $now.plus({ days: 1 }).beginningOf("month").format("yyyy-MM") }}');
-show('={{ $json.user.keys() }}');
 show('={{ $if($json.n > 1, $json.test, $json.n) }}');
-show('={{ $max(1, $json.n) }}');
-show('={{ $ifEmpty($json.nothing, "fallback") }}');
-
-console.log('\n--- shape rules and errors ---');
 show('=Order {{ $("Webhook").item.json.body.orderId }} for {{ $json.user.name }}');
 show('={{ $json.test.toUppercase() }}');
 show('={{ $json.nothing.x }}');
-show('={{ $execution.mode === "prod" }}');
+show('={{ $vars.nope }}');
 
-console.log('\n--- contexts ---');
+console.log('\n--- contexts, no sample: runtime holes are loose, globals are not ---');
 show("={{ $credentials.baseUrl + '/' + $value }}", emptyShape('routing'));
 show('={{ $response.body.next ?? $request.url }}', emptyShape('httpPagination'));
 show('={{ $pageCount }}', emptyShape('nodeParameter'));
@@ -61,8 +49,5 @@ show('={{ $json.id }}', emptyShape('credential'));
 console.log('\n--- completions ---');
 complete('={{ $json.test.| }}');
 complete("={{ $('Webhook').item.json.| }}");
-complete('={{ $vars.| }}');
 complete('={{ $now.| }}');
 complete('={{ $| }}');
-
-if (process.argv.includes('--globals')) console.log(globalsFor(shape));

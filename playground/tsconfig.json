@@ -7,8 +7,16 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": [],
-    "plugins": [{ "name": "@n8n/expression-ts-plugin" }]
+    "types": [
+      "node"
+    ],
+    "plugins": [
+      {
+        "name": "@n8n/expression-ts-plugin"
+      }
+    ]
   },
-  "include": ["*.ts"]
+  "include": [
+    "*.ts"
+  ]
 }

@@ -5,7 +5,7 @@
   "scripts": {
     "build:plugin": "pnpm --filter @n8n/expression-ts-plugin build",
     "prepare": "pnpm build:plugin",
-    "demo": "pnpm --filter @n8n/expression-types demo",
+    "demo": "tsx playground/service-demo.ts",
     "drift": "pnpm --filter @n8n/expression-types drift",
     "gen-extensions": "pnpm --filter @n8n/expression-types gen-extensions",
     "gen-resolved": "tsx packages/core/gen-resolved.ts playground/tsconfig.json",

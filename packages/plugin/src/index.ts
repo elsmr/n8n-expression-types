@@ -1,8 +1,8 @@
 // TypeScript language service plugin for n8n expressions in string literals.
-//   - diagnostics, hover, completions and inlay hints inside `=...{{ }}` strings
-//   - keeps <project>/n8n-resolved.d.ts in sync with resolve() calls, so the
-//     resolved types flow through the checker while you type
-// Shapes: the runtime/data argument when present, else what the surrounding code declares.
+// Inside a {{ }} block it forwards TypeScript's own hover, completions, signature help,
+// quick fixes, inlay hints and semantic classifications from the virtual file, with
+// positions mapped back. It adds block and expression types, n8n's sandbox rules, and
+// keeps <project>/n8n-resolved.d.ts in sync so resolved types flow while you type.
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -34,7 +34,6 @@ const init = (modules: { typescript: typeof TS }) => {
 		const projectDir = info.project.getCurrentDirectory();
 		const service = createExpressionService({ ts, root });
 
-		// ----- per-file analysis, cached by script version -----
 		const cache = new Map<string, { version: string; items: Item[] }>();
 		const itemsFor = (fileName: string): Item[] => {
 			const version = info.languageServiceHost.getScriptVersion(fileName);
@@ -60,7 +59,6 @@ const init = (modules: { typescript: typeof TS }) => {
 		const blockAt = (it: Item, position: number) =>
 			it.analysis.blocks.find((b) => position >= it.textStart + b.start && position <= it.textStart + b.end);
 
-		// ----- generated lookup for resolve() -----
 		const resolvedByFile = new Map<string, Item[]>();
 		const resolvedPath = path.join(projectDir, 'n8n-resolved.d.ts');
 		const syncResolved = (fileName: string, items: Item[]) => {
@@ -77,7 +75,6 @@ const init = (modules: { typescript: typeof TS }) => {
 			}
 		};
 
-		// ----- decorated service -----
 		const proxy: TS.LanguageService = Object.create(null);
 		for (const k of Object.keys(ls) as Array<keyof TS.LanguageService>) {
 			const fn = ls[k] as unknown as (...args: unknown[]) => unknown;
@@ -114,8 +111,6 @@ const init = (modules: { typescript: typeof TS }) => {
 			return [...prior, ...extra];
 		};
 
-		// Hover: TypeScript's own quick info for the token under the cursor, the block's
-		// result type on the {{ }} delimiters, the expression's type on surrounding text.
 		// Hovering the variable an expr() is assigned to: TypeScript's Expr<...> plus what it resolves to.
 		const withResolveSummary = (fileName: string, position: number): TS.QuickInfo | undefined => {
 			const prior = ls.getQuickInfoAtPosition(fileName, position);
@@ -134,6 +129,8 @@ const init = (modules: { typescript: typeof TS }) => {
 			return { ...prior, documentation: [...(prior.documentation ?? []), { text: summary, kind: 'text' }] };
 		};
 
+		// Inside a block: TypeScript's own quick info for the token. On the {{ }} delimiters:
+		// the block's result type. On surrounding text: the expression's type.
 		proxy.getQuickInfoAtPosition = (fileName, position) => {
 			const it = itemAt(fileName, position);
 			if (!it) return withResolveSummary(fileName, position);

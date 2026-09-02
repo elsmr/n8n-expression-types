@@ -13,7 +13,6 @@
     "./extensions.d.ts": "./extensions.d.ts"
   },
   "scripts": {
-    "demo": "tsx demo.ts",
     "gen-extensions": "tsx gen-extensions.ts",
     "drift": "tsx drift.ts",
     "typecheck": "tsc --noEmit"

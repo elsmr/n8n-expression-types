@@ -1,6 +1,5 @@
-// Builds a RuntimeShape from the checker's type of a runtime/data value, so
-// expr(text, runtime) and resolve(expression, data) analyse against whatever the
-// argument is typed as.
+// Builds a RuntimeShape from the checker's type of the data passed to resolve() or
+// Resolve<>, so the expression is analysed against whatever that argument is typed as.
 import type TS from 'typescript';
 import { isContextName, type ExpressionContext, type RuntimeShape } from './globals.ts';
 

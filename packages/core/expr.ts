@@ -1,16 +1,16 @@
 /// <reference path="./shapes.d.ts" />
 // String form.
 //
-//   expr('={{ $now.toISO() }}')                     Expression<string, 'nodeParameter'>
-//   expr.routing('={{ $credentials.baseUrl }}')     Expression<any, 'routing'>: no data known here
-//   resolve(expression, data)                       T, checked against `data`
-//   Resolve<typeof expression, typeof data>         same check, type only
+//   expr('={{ $now.toISO() }}')                   Expr<NodeParameterContext, "={{ $now.toISO() }}">
+//   expr.routing('={{ $credentials.baseUrl }}')   Expr<RoutingContext, "...">
+//   expr('={{ $pageCount }}')                     InvalidExpr<NodeParameterContext, "...">
+//   resolve(expression, data)                     the type against `data`
+//   Resolve<typeof expression, typeof data>       same, type only
 //
-// Types come from `N8nResolvedTypes`, filled per (context, text) by the generator
-// (gen-resolved.ts, or the language service plugin while you type). An expression that
-// is resolve()d somewhere gets the type computed against that data; otherwise the type
-// from what the surrounding code declares, with runtime holes loose. Until generated the
-// type is `any`. At runtime expr() returns its argument; resolve() is n8n's job.
+// TypeScript cannot parse the string, so the types come from `N8nResolvedTypes`, a lookup
+// the generator writes (gen-resolved.ts, or the plugin while you type). The text lives in
+// the brand because it is the only key into that lookup. Until generated, `any`.
+// At runtime expr() returns its argument; evaluation is n8n's job.
 
 import {
 	contextNames,

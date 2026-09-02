@@ -6,6 +6,8 @@
     "@n8n/expression-types": "workspace:*"
   },
   "devDependencies": {
-    "@n8n/expression-ts-plugin": "workspace:*"
+    "@n8n/expression-ts-plugin": "workspace:*",
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.3"
   }
 }
