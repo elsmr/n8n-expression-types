@@ -74,8 +74,10 @@ export const createExpressionService = ({ ts, root }: Options) => {
 		versions.set(name, (versions.get(name) ?? 0) + 1);
 	};
 
+	// noImplicitAny off: with loose runtime data, `$json.items.map((i) => ...)` must not fail on `i`.
 	const options: TS.CompilerOptions = {
 		strict: true,
+		noImplicitAny: false,
 		target: ts.ScriptTarget.ESNext,
 		lib: ['lib.es2023.d.ts'],
 		module: ts.ModuleKind.ESNext,
@@ -122,15 +124,31 @@ export const createExpressionService = ({ ts, root }: Options) => {
 		const sf = program.getSourceFile(EXPR_FILE)!;
 		const diags = [...service.getSyntacticDiagnostics(EXPR_FILE), ...service.getSemanticDiagnostics(EXPR_FILE)];
 
+		// Find each block's statement by name: a body that is not a single expression would
+		// otherwise shift every later block onto the wrong statement.
+		const declaration = (name: string) =>
+			sf.statements.find(
+				(st): st is TS.VariableStatement =>
+					ts.isVariableStatement(st) && st.declarationList.declarations[0]?.name.getText(sf) === name,
+			);
 		const typed = blocks.map((b, i) => {
-			const stmt = sf.statements[i] as TS.VariableStatement;
+			const stmt = declaration(`__r${i}`);
+			const toExpr = (fileOffset: number) => Math.min(Math.max(fileOffset - b.fileStart, 0), b.body.length) + b.start;
+			if (!stmt) {
+				return {
+					body: b.body,
+					start: b.start,
+					end: b.end,
+					type: 'unknown',
+					errors: [{ message: 'A block must contain a single expression.', start: b.start, end: b.end, code: 1109 }],
+				};
+			}
 			const decl = stmt.declarationList.declarations[0];
 			const type = checker.typeToString(
 				checker.getTypeAtLocation(decl.name),
 				undefined,
 				ts.TypeFormatFlags.NoTruncation,
 			);
-			const toExpr = (fileOffset: number) => Math.min(Math.max(fileOffset - b.fileStart, 0), b.body.length) + b.start;
 			const errors = diags
 				.filter((d) => d.start !== undefined && d.start >= stmt.getStart(sf) && d.start <= stmt.getEnd())
 				.map((d) => ({
@@ -146,9 +164,8 @@ export const createExpressionService = ({ ts, root }: Options) => {
 			}
 			return { body: b.body, start: b.start, end: b.end, type, errors };
 		});
-
 		const type = !hasText && typed.length === 1 ? typed[0].type : 'string';
-		const checkStmt = expected ? sf.statements[blocks.length] : undefined;
+		const checkStmt = expected ? declaration('__expected') : undefined;
 		const slotError = checkStmt
 			? diags
 					.filter((d) => d.start !== undefined && d.start >= checkStmt.getStart(sf) && d.start <= checkStmt.getEnd())
@@ -196,7 +213,7 @@ export const createExpressionService = ({ ts, root }: Options) => {
 		};
 	};
 
-	return { analyze, completionsAt, virtual, globalsFor: buildGlobals };
+	return { analyze, completionsAt, virtual };
 };
 
 export type ExpressionService = ReturnType<typeof createExpressionService>;

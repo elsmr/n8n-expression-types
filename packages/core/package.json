@@ -12,11 +12,6 @@
     "./shapes.d.ts": "./shapes.d.ts",
     "./extensions.d.ts": "./extensions.d.ts"
   },
-  "scripts": {
-    "gen-extensions": "tsx gen-extensions.ts",
-    "drift": "tsx drift.ts",
-    "typecheck": "tsc --noEmit"
-  },
   "dependencies": {
     "@types/luxon": "^3.7.5",
     "luxon": "^3.7.2"

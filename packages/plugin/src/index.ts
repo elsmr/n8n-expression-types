@@ -51,7 +51,6 @@ const init = (modules: { typescript: typeof TS }) => {
 				return { ...f, analysis, hoverShape, hoverAnalysis };
 			});
 			cache.set(fileName, { version, items });
-			syncResolved(fileName, items);
 			return items;
 		};
 		const itemAt = (fileName: string, position: number) =>
@@ -81,10 +80,12 @@ const init = (modules: { typescript: typeof TS }) => {
 			(proxy as unknown as Record<string, unknown>)[k] = (...args: unknown[]) => fn.apply(ls, args);
 		}
 
+		// The lookup is written from the diagnostics pass only, never from hover or completion.
 		proxy.getSemanticDiagnostics = (fileName) => {
 			const prior = ls.getSemanticDiagnostics(fileName);
 			const sf = ls.getProgram()?.getSourceFile(fileName);
 			if (!sf) return prior;
+			syncResolved(fileName, itemsFor(fileName));
 			// Same codes as TypeScript's own diagnostics, so they read as ts(2339) in the editor.
 			const diag = (start: number, length: number, messageText: string, code: number): TS.Diagnostic => ({
 				file: sf,

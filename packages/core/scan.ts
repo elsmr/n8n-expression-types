@@ -39,7 +39,6 @@ const portable = (text: string): string | undefined => {
 	const names = stripped.match(/\b[A-Z]\w*\b/g) ?? [];
 	return names.every((n) => PORTABLE_NAMES.has(n)) ? text : undefined;
 };
-const safeExpected = portable;
 
 /** Expression<T, C> brand on a type or one of its union members. */
 const brandOf = (ts: typeof TS, checker: TS.TypeChecker, type: TS.Type | undefined) => {
@@ -137,7 +136,7 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
 					node,
 					context: brand.context,
 					shape: staticShape(ts, node, brand.context),
-					expected: safeExpected(brand.expected),
+					expected: portable(brand.expected),
 				});
 			}
 		}

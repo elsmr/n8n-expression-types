@@ -18,17 +18,13 @@ resolve(typo, runtime);                  // N8nResolveError, and the line is und
 
 ```sh
 pnpm install
-pnpm smoke      # drives the editor plugin headless and prints what it would show
+pnpm open        # VS Code with the extension loaded, on playground/node-description.ts
 ```
 
-Or open the folder in VS Code and press F5. An Extension Development Host opens on
-`playground/` (see its README for a 5-step tour):
-
-- `node-description.ts`: a node definition with no markers at all. `$parameter.operaton`
-  is underlined with "Did you mean 'operation'?", typed from the sibling `properties`.
-- `strings.ts`: `expr()` declarations, `resolve()` against sample data, type-only checks
-  with `Resolve<>`, and n8n sandbox rules such as `.constructor`.
-- `lambda.ts`: the same expressions written as typed lambdas.
+`playground/README.md` is a five-step tour of what to hover. Other routes: F5 from the
+repo root does the same as `pnpm open`; `pnpm vsix` builds an installable extension for
+any workspace (`code --install-extension n8n-expressions.vsix`); `pnpm test` drives the
+plugin headless and asserts what it shows.
 
 ## What you get
 
@@ -112,14 +108,14 @@ the moment it is passed to `resolve()`.
 | `packages/core` | `@n8n/expression-types`: service, contexts and globals, `expr`/`resolve`, lambda form, generators, drift check |
 | `packages/plugin` | `@n8n/expression-ts-plugin`: the tsserver plugin |
 | `packages/vscode` | VS Code extension: `{{ }}` highlighting, bundles the plugin |
-| `playground` | Examples, `service-demo.ts`, and the historical pure type-level attempt |
+| `playground` | The tour, type tests, `service-demo.ts` |
 | `docs/design.md` | Decisions, alternatives rejected, known gaps, cost numbers |
 
 ```sh
-pnpm typecheck    # core, plugin, generate lookup, playground
+pnpm test         # plugin behaviour, headless
+pnpm typecheck    # core, plugin, generate lookup, playground incl. type tests
 pnpm demo         # service API without an editor
 pnpm drift        # n8n-workflow globals vs declared layers
-pnpm gen-extensions
 ```
 
 TypeScript is pinned to 6.x: `typescript@7` is the Go compiler and has no language

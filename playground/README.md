@@ -16,4 +16,4 @@ Open this folder in the Extension Development Host (F5 from the repo root) or ru
    watch the diagnostics move.
 
 `service-demo.ts` shows the service API without an editor (`pnpm demo`).
-`type-level.ts` is the historical pure type-level attempt, kept for reference.
+

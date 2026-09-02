@@ -5,23 +5,43 @@
   "version": "0.0.0",
   "publisher": "n8n",
   "private": true,
-  "engines": { "vscode": "^1.90.0" },
-  "categories": ["Programming Languages"],
-  "extensionDependencies": ["vscode.typescript-language-features"],
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "extensionDependencies": [
+    "vscode.typescript-language-features"
+  ],
   "contributes": {
     "grammars": [
       {
         "scopeName": "inline.n8n-expression.injection",
         "path": "./syntaxes/n8n-expression.injection.json",
-        "injectTo": ["source.ts", "source.tsx", "source.js", "source.jsx"],
-        "embeddedLanguages": { "meta.embedded.block.n8n-expression": "typescript" }
+        "injectTo": [
+          "source.ts",
+          "source.tsx",
+          "source.js",
+          "source.jsx"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.n8n-expression": "typescript"
+        }
       }
     ],
     "typescriptServerPlugins": [
-      { "name": "@n8n/expression-ts-plugin", "enableForWorkspaceTypeScriptVersions": true }
+      {
+        "name": "@n8n/expression-ts-plugin",
+        "enableForWorkspaceTypeScriptVersions": true
+      }
     ]
   },
   "dependencies": {
     "@n8n/expression-ts-plugin": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elsmr/n8n-expression-types"
   }
 }

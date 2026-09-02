@@ -93,15 +93,24 @@ export const propertiesType = (ts: typeof TS, properties: TS.ArrayLiteralExpress
 	return `{ ${[...members, ...(open ? ['[key: string]: any'] : [])].join('; ')} }`;
 };
 
-/** Nearest enclosing object with a `properties` array: a node description. */
+const looksLikeProperties = (ts: typeof TS, arr: TS.ArrayLiteralExpression) =>
+	arr.elements.some((e) => ts.isObjectLiteralExpression(e) && stringProp(ts, e, 'name') && stringProp(ts, e, 'type'));
+
+/**
+ * Nearest enclosing `properties:` array of a node description. Most of nodes-base keeps
+ * properties in separate `*Description.ts` files as exported `INodeProperties[]`, so the
+ * outermost array of property objects counts too when no description object encloses it.
+ */
 export const enclosingParameters = (ts: typeof TS, node: TS.Node): string | undefined => {
+	let outermost: TS.ArrayLiteralExpression | undefined;
 	for (let cur: TS.Node | undefined = node.parent; cur; cur = cur.parent) {
 		if (ts.isObjectLiteralExpression(cur)) {
 			const props = arrayProp(ts, cur, 'properties');
 			if (props) return propertiesType(ts, props);
 		}
+		if (ts.isArrayLiteralExpression(cur) && looksLikeProperties(ts, cur)) outermost = cur;
 	}
-	return undefined;
+	return outermost ? propertiesType(ts, outermost) : undefined;
 };
 
 /** Nearest enclosing object that looks like an INodeProperties (has name and type). */

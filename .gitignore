@@ -1,3 +1,4 @@
 node_modules/
 packages/plugin/dist/
 playground/_bench*
+*.vsix

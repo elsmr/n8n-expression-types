@@ -27,11 +27,13 @@ declare global {
 	 * Filled by the generator, one entry per (context, text):
 	 *   loose: the definition-time type, runtime holes unchecked
 	 *   strict: [dataType, result] for every resolve()/Resolve<> site, matched structurally
+	 * The index signature is what a missing key resolves to (`any`, no pairs). Looking keys
+	 * up through `keyof` instead made checking quadratic in the number of entries.
 	 */
-	interface N8nResolvedTypes {}
+	interface N8nResolvedTypes {
+		[key: string]: { loose: any; strict: unknown[] };
+	}
 }
-
-type Entry = { loose: unknown; strict: unknown[] };
 type Brand<T, C, E> = { readonly __n8n?: { type: T; context: C; text: E } };
 
 /** Slot declaration: a string that must be an expression yielding T in context C. */
@@ -40,17 +42,12 @@ export type Expression<T = unknown, C extends ContextType = NodeParameterContext
 export type ResolvedKey<C extends ContextType, E extends string> = `${ContextName<C>}::${E}`;
 export const resolvedKey = (context: string, expression: string) => `${context}::${expression}`;
 
-type EntryOf<C extends ContextType, E extends string> =
-	ResolvedKey<C, E> extends keyof N8nResolvedTypes
-		? N8nResolvedTypes[ResolvedKey<C, E>] extends Entry
-			? N8nResolvedTypes[ResolvedKey<C, E>]
-			: never
-		: never;
+type EntryOf<C extends ContextType, E extends string> = N8nResolvedTypes[ResolvedKey<C, E>];
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
 
 /** Definition-time type: what the text yields with runtime holes loose. `any` until generated. */
-export type Resolved<C extends ContextType, E extends string> = [EntryOf<C, E>] extends [never] ? any : EntryOf<C, E>['loose'];
+export type Resolved<C extends ContextType, E extends string> = EntryOf<C, E>['loose'];
 
 /** What expr() returns: the text E declared as an expression in context C. Its type is derived, not shown. */
 export type Expr<C extends ContextType, E extends string> = string & Brand<Resolved<C, E>, C, E>;

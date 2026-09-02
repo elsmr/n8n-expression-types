@@ -214,6 +214,7 @@ var createExpressionService = ({ ts, root }) => {
   };
   const options = {
     strict: true,
+    noImplicitAny: false,
     target: ts.ScriptTarget.ESNext,
     lib: ["lib.es2023.d.ts"],
     module: ts.ModuleKind.ESNext,
@@ -254,15 +255,27 @@ const __expected: ${expected} = ${single ? "__r0" : "'' as string"};` : "";
     const checker = program.getTypeChecker();
     const sf = program.getSourceFile(EXPR_FILE);
     const diags = [...service.getSyntacticDiagnostics(EXPR_FILE), ...service.getSemanticDiagnostics(EXPR_FILE)];
+    const declaration = (name) => sf.statements.find(
+      (st) => ts.isVariableStatement(st) && st.declarationList.declarations[0]?.name.getText(sf) === name
+    );
     const typed = blocks.map((b, i) => {
-      const stmt = sf.statements[i];
+      const stmt = declaration(`__r${i}`);
+      const toExpr = (fileOffset) => Math.min(Math.max(fileOffset - b.fileStart, 0), b.body.length) + b.start;
+      if (!stmt) {
+        return {
+          body: b.body,
+          start: b.start,
+          end: b.end,
+          type: "unknown",
+          errors: [{ message: "A block must contain a single expression.", start: b.start, end: b.end, code: 1109 }]
+        };
+      }
       const decl = stmt.declarationList.declarations[0];
       const type2 = checker.typeToString(
         checker.getTypeAtLocation(decl.name),
         void 0,
         ts.TypeFormatFlags.NoTruncation
       );
-      const toExpr = (fileOffset) => Math.min(Math.max(fileOffset - b.fileStart, 0), b.body.length) + b.start;
       const errors = diags.filter((d) => d.start !== void 0 && d.start >= stmt.getStart(sf) && d.start <= stmt.getEnd()).map((d) => ({
         message: ts.flattenDiagnosticMessageText(d.messageText, "\n"),
         start: toExpr(d.start),
@@ -277,7 +290,7 @@ const __expected: ${expected} = ${single ? "__r0" : "'' as string"};` : "";
       return { body: b.body, start: b.start, end: b.end, type: type2, errors };
     });
     const type = !hasText && typed.length === 1 ? typed[0].type : "string";
-    const checkStmt = expected ? sf.statements[blocks.length] : void 0;
+    const checkStmt = expected ? declaration("__expected") : void 0;
     const slotError = checkStmt ? diags.filter((d) => d.start !== void 0 && d.start >= checkStmt.getStart(sf) && d.start <= checkStmt.getEnd()).map(() => `Expression yields ${type}, slot expects ${expected}.`)[0] : void 0;
     return { type, blocks: typed, ...slotError ? { slotError } : {} };
   };
@@ -313,7 +326,7 @@ const __expected: ${expected} = ${single ? "__r0" : "'' as string"};` : "";
       }
     };
   };
-  return { analyze, completionsAt, virtual, globalsFor: buildGlobals };
+  return { analyze, completionsAt, virtual };
 };
 
 // ../core/shape-from-type.ts
@@ -456,14 +469,17 @@ var propertiesType = (ts, properties) => {
   }
   return `{ ${[...members, ...open ? ["[key: string]: any"] : []].join("; ")} }`;
 };
+var looksLikeProperties = (ts, arr) => arr.elements.some((e) => ts.isObjectLiteralExpression(e) && stringProp(ts, e, "name") && stringProp(ts, e, "type"));
 var enclosingParameters = (ts, node) => {
+  let outermost;
   for (let cur = node.parent; cur; cur = cur.parent) {
     if (ts.isObjectLiteralExpression(cur)) {
       const props = arrayProp(ts, cur, "properties");
       if (props) return propertiesType(ts, props);
     }
+    if (ts.isArrayLiteralExpression(cur) && looksLikeProperties(ts, cur)) outermost = cur;
   }
-  return void 0;
+  return outermost ? propertiesType(ts, outermost) : void 0;
 };
 var enclosingValue = (ts, node) => {
   for (let cur = node.parent; cur; cur = cur.parent) {
@@ -490,7 +506,6 @@ var portable = (text) => {
   const names = stripped.match(/\b[A-Z]\w*\b/g) ?? [];
   return names.every((n) => PORTABLE_NAMES.has(n)) ? text : void 0;
 };
-var safeExpected = portable;
 var brandOf = (ts, checker, type) => {
   if (!type) return void 0;
   for (const t of type.isUnion() ? type.types : [type]) {
@@ -573,7 +588,7 @@ var findExpressions = (ts, sf, checker) => {
           node,
           context: brand.context,
           shape: staticShape(ts, node, brand.context),
-          expected: safeExpected(brand.expected)
+          expected: portable(brand.expected)
         });
       }
     }
@@ -647,7 +662,6 @@ var init = (modules) => {
         return { ...f, analysis, hoverShape, hoverAnalysis };
       });
       cache.set(fileName, { version, items });
-      syncResolved(fileName, items);
       return items;
     };
     const itemAt = (fileName, position) => itemsFor(fileName).find((it) => !it.reportAt && position >= it.textStart && position <= it.textStart + it.expression.length);
@@ -675,6 +689,7 @@ var init = (modules) => {
       const prior = ls.getSemanticDiagnostics(fileName);
       const sf = ls.getProgram()?.getSourceFile(fileName);
       if (!sf) return prior;
+      syncResolved(fileName, itemsFor(fileName));
       const diag = (start, length, messageText, code) => ({
         file: sf,
         start,

@@ -7,7 +7,12 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/*.ts", "smoke.ts"]
+  "include": [
+    "src/*.ts",
+    "plugin.test.ts"
+  ]
 }

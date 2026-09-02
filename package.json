@@ -3,14 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:plugin": "pnpm --filter @n8n/expression-ts-plugin build",
-    "prepare": "pnpm build:plugin",
+    "open": "pnpm build:plugin && code --extensionDevelopmentPath=\"$PWD/packages/vscode\" \"$PWD/playground\" \"$PWD/playground/node-description.ts\"",
+    "test": "pnpm build:plugin && tsx packages/plugin/plugin.test.ts",
+    "typecheck": "tsc -p packages/core && tsc -p packages/plugin && pnpm gen-resolved && tsc -p playground",
     "demo": "tsx playground/service-demo.ts",
-    "drift": "pnpm --filter @n8n/expression-types drift",
-    "gen-extensions": "pnpm --filter @n8n/expression-types gen-extensions",
+    "drift": "tsx packages/core/drift.ts",
     "gen-resolved": "tsx packages/core/gen-resolved.ts playground/tsconfig.json",
-    "smoke": "pnpm build:plugin && tsx packages/plugin/smoke.ts",
-    "typecheck": "tsc -p packages/core && tsc -p packages/plugin && pnpm gen-resolved && tsc -p playground"
+    "gen-extensions": "tsx packages/core/gen-extensions.ts",
+    "vsix": "pnpm build:plugin && node scripts/build-vsix.mjs",
+    "build:plugin": "pnpm --filter @n8n/expression-ts-plugin build",
+    "prepare": "pnpm build:plugin"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

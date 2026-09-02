@@ -18,5 +18,9 @@
   },
   "include": [
     "*.ts"
+  ],
+  "exclude": [
+    "_bench*.ts",
+    "_dbg*.ts"
   ]
 }

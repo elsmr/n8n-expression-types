@@ -65,7 +65,7 @@ that yields `string` is reported, when the slot type spells out primitives.
 ## Alternatives rejected
 
 - Pure type-level parser: exact for `$json.a.b` paths and a fixed method table, never
-  arbitrary JS. Kept as `playground/type-level.ts`.
+  arbitrary JS. It lives in git history (`playground/type-level.ts`, removed).
 - Language service plugin only: cannot change what the checker infers, so no types flow.
 - VS Code extension only: works in one editor; the plugin works in any tsserver editor and
   the extension bundles it.
@@ -73,23 +73,40 @@ that yields `string` is reported, when the slot type spells out primitives.
 
 ## Cost
 
-Measured on the playground, TypeScript 6.0.3:
+Measured against the real `nodes-base` corpus (1113 expression literals in 663 files,
+358 distinct texts) on TypeScript 6.0.3:
 
 | | |
 | --- | --- |
-| First analysis in a session | 148 ms |
-| Per expression analysis | 5.5 ms |
-| Per hover inside a block | 4.1 ms |
-| Generated lookup for 10 expressions with 6 data pairings | 8 KB |
+| First analysis in a session | 120 to 150 ms |
+| Per expression, one virtual file each | p50 2.5 ms, p95 7 to 9 ms |
+| Whole corpus, one file each | 3 to 4 s |
+| Whole corpus, batched 200 blocks per virtual file | 0.1 to 0.2 s |
+| Static `$parameter` derivation, whole corpus | 11 ms |
+| `tsc` with a 2000-entry lookup | +0.2 s (was +13 s before the index-signature fix) |
+| Plugin, one keystroke in a 31-expression file | 100 to 150 ms, synchronous on tsserver's thread |
 
-Analyses are cached per file version; hover does not re-analyse. The lookup file grows
-with the number of distinct expression and data-type pairings.
+Analyses are cached per file version. The lookup is written from the diagnostics pass
+only, and only when its content changes. Looking keys up through `keyof N8nResolvedTypes`
+made every check quadratic in the entry count; an index signature for the missing-key
+case removed that.
+
+Done from the scaling review: index-signature lookup, statement mapping by name instead
+of index (a body that is not a single expression shifted later blocks), no lookup writes
+from hover or completion, `$parameter` from exported `INodeProperties[]` arrays (36% to
+most of `nodes-base`), `noImplicitAny` off in the virtual project so loose data does not
+flag callback parameters.
+
+Next for scale: batch all blocks of a file into one virtual file per shape. Measured at
+20 to 40 times faster; needs the per-statement mapping that now exists.
 
 ## Known gaps
 
 - Sample-derived types produce false errors for fields the sample lacks; the loose default
   limits this to sites that pass data.
 - The lambda form serialises with `fn.toString()` and does not detect free variables.
+- 4% of `nodes-base` literals are concatenation fragments (`'={{ ... ' + x`) with no
+  complete block; they are typed as their literal text.
 - `$parameter` ignores `displayOptions` and versions. `$self` is loose.
 - Slot checks skip slot types that name non-portable types.
 - Position mapping assumes no escape sequences in the literal.

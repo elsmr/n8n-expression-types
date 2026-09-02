@@ -5,3 +5,5 @@ onlyBuiltDependencies:
   - esbuild
 ignoredBuiltDependencies:
   - isolated-vm
+  - "@vscode/vsce-sign"
+  - keytar
