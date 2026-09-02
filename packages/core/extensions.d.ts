@@ -239,11 +239,6 @@ declare global {
 		 */
 		replaceSpecialChars(): string;
 		/**
-		 * Returns the character count of a string.
-		 * @see https://docs.n8n.io/code/builtin/data-transformation-functions/strings
-		 */
-		length(): number;
-		/**
 		 * Returns <code>true</code> if a string is a domain.
 		 * @example "n8n.io".isDomain() // true
 		 * @example "http://n8n.io".isDomain() // false

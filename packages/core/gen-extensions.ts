@@ -86,7 +86,7 @@ const signature = (method: string, doc: Doc | undefined, self: string): string =
 
 // n8n dispatches these at runtime, but as declarations they would collide with an existing
 // property: Array#length from lib, DateTime#isWeekend from @types/luxon (a getter, not a method).
-const COLLIDES: Record<string, string[]> = { Array: ['length'], Date: ['isWeekend'] };
+const COLLIDES: Record<string, string[]> = { String: ['length'], Array: ['length'], Date: ['isWeekend'] };
 
 const members = (typeName: string): string => {
 	const map = ExpressionExtensions.find((m) => m.typeName === typeName);
