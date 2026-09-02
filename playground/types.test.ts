@@ -1,6 +1,6 @@
-// Type tests: plain tsc, no library. Each entry fails to compile when the typing regresses.
-// Slot and sandbox behaviour are diagnostics, not types: `pnpm gen-resolved --fail-on-error`
-// covers those.
+// Type tests, no library. Each entry fails to compile when the typing regresses. They run
+// through `pnpm check`, which also reports the diagnostics that are not types: slot
+// mismatches, $parameter typos, sandbox rules.
 import {
 	expression,
 	resolve,

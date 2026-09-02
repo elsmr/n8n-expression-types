@@ -8,8 +8,8 @@
 //   Resolve<typeof expression, typeof data>       same, type only
 //
 // TypeScript cannot parse the string, so the types come from `N8nResolvedTypes`, a lookup
-// the generator writes (gen-resolved.ts, or the plugin while you type). The text lives in
-// the brand because it is the only key into that lookup. Until generated, `any`.
+// the plugin injects into the program while you type and check.ts injects for CI. The text
+// lives in the brand because it is the only key into that lookup. Until filled, `any`.
 // At runtime expr() returns its argument; evaluation is n8n's job.
 
 import {
@@ -51,7 +51,7 @@ export type Resolved<C extends ContextType, E extends string> = EntryOf<C, E>['l
 
 /** What expr() returns: the text E declared as an expression in context C. Its type is derived, not shown. */
 export type Expr<C extends ContextType, E extends string> = string & Brand<Resolved<C, E>, C, E>;
-/** Same, when the text is wrong in its context. The plugin or gen-resolved says why. */
+/** Same, when the text is wrong in its context. The plugin or check.ts says why. */
 export type InvalidExpr<C extends ContextType, E extends string> = string & Brand<N8nInvalidExpression, C, E>;
 
 type ExprResult<C extends ContextType, E extends string> =

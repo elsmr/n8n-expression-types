@@ -33,7 +33,6 @@ __export(index_exports, {
   default: () => index_default
 });
 module.exports = __toCommonJS(index_exports);
-var import_node_fs = require("node:fs");
 var import_node_path = __toESM(require("node:path"), 1);
 
 // ../core/globals.ts
@@ -603,18 +602,30 @@ var resolvedType = (a, against = "definition") => {
   return against === "data" ? "N8nResolveError" : "N8nInvalidExpression";
 };
 var renderResolved = (entries) => {
+  const aliases = /* @__PURE__ */ new Map();
+  const alias = (dataText) => {
+    const existing = aliases.get(dataText);
+    if (existing) return existing;
+    const name = `D${aliases.size}`;
+    aliases.set(dataText, name);
+    return name;
+  };
   const lines = [...entries.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, e]) => {
-    const strict = e.strict.map(([d, t]) => `[${d}, ${t}]`).join(", ");
+    const strict = e.strict.map(([d, t]) => `[${alias(d)}, ${t}]`).join(", ");
     return `		${JSON.stringify(key)}: { loose: ${e.loose ?? "any"}; strict: [${strict}] };`;
   });
-  return `// Generated from expr() and resolve() sites. Do not edit.
-declare global {
-	interface N8nResolvedTypes {
-${lines.join("\n")}
-	}
-}
-export {};
-`;
+  const aliasLines = [...aliases.entries()].map(([text, name]) => `type ${name} = ${text};`);
+  return [
+    "// Generated from expr() and resolve() sites by @n8n/expression-types. Do not edit.",
+    ...aliasLines,
+    "declare global {",
+    "	interface N8nResolvedTypes {",
+    ...lines,
+    "	}",
+    "}",
+    "export {};",
+    ""
+  ].join("\n");
 };
 var lookupEntries = (items) => {
   const out = /* @__PURE__ */ new Map();
@@ -667,18 +678,31 @@ var init = (modules) => {
     const itemAt = (fileName, position) => itemsFor(fileName).find((it) => !it.reportAt && position >= it.textStart && position <= it.textStart + it.expression.length);
     const blockAt = (it, position) => it.analysis.blocks.find((b) => position >= it.textStart + b.start && position <= it.textStart + b.end);
     const resolvedByFile = /* @__PURE__ */ new Map();
-    const resolvedPath = import_node_path.default.join(projectDir, "n8n-resolved.d.ts");
+    const resolvedFile = import_node_path.default.join(projectDir, "__n8n-expressions-lookup__.d.ts");
+    let resolvedText = renderResolved(/* @__PURE__ */ new Map());
+    let resolvedVersion = 1;
+    const lsHost = info.languageServiceHost;
+    const origFileNames = lsHost.getScriptFileNames.bind(lsHost);
+    const origVersion = lsHost.getScriptVersion.bind(lsHost);
+    const origSnapshot = lsHost.getScriptSnapshot.bind(lsHost);
+    lsHost.getScriptFileNames = () => {
+      const names = origFileNames();
+      return names.includes(resolvedFile) ? names : [...names, resolvedFile];
+    };
+    lsHost.getScriptVersion = (f) => f === resolvedFile ? String(resolvedVersion) : origVersion(f);
+    lsHost.getScriptSnapshot = (f) => f === resolvedFile ? ts.ScriptSnapshot.fromString(resolvedText) : origSnapshot(f);
     const syncResolved = (fileName, items) => {
       const mine = items.filter((i) => i.kind !== "slot");
       if (mine.length === 0 && !resolvedByFile.has(fileName)) return;
       resolvedByFile.set(fileName, mine);
-      const all = lookupEntries([...resolvedByFile.values()].flat());
-      const next = renderResolved(all);
-      const current = (0, import_node_fs.existsSync)(resolvedPath) ? (0, import_node_fs.readFileSync)(resolvedPath, "utf8") : "";
-      if (next !== current) {
-        (0, import_node_fs.writeFileSync)(resolvedPath, next);
-        log(`wrote ${resolvedPath} (${all.size} expressions)`);
-      }
+      const next = renderResolved(lookupEntries([...resolvedByFile.values()].flat()));
+      if (next === resolvedText) return;
+      resolvedText = next;
+      resolvedVersion++;
+      const project = info.project;
+      project.markAsDirty?.();
+      project.refreshDiagnostics?.();
+      log(`lookup updated (${resolvedVersion})`);
     };
     const proxy = /* @__PURE__ */ Object.create(null);
     for (const k of Object.keys(ls)) {

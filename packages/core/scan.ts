@@ -147,9 +147,9 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
 };
 
 /**
- * Type text for the generated lookup: the value type, or an error type. Without data
- * an error means the text is invalid; against data it means the data does not fit.
- * The messages themselves are diagnostics (plugin, gen-resolved), not types.
+ * Type text for the lookup: the value type, or an error type. Without data an error means
+ * the text is invalid; against data it means the data does not fit. The messages
+ * themselves are diagnostics (plugin, check.ts), not types.
  */
 export const resolvedType = (a: Analysis, against: 'definition' | 'data' = 'definition'): string => {
 	const failed = a.blocks.some((b) => b.errors.length > 0) || !!a.slotError;
@@ -159,14 +159,34 @@ export const resolvedType = (a: Analysis, against: 'definition' | 'data' = 'defi
 
 export type LookupEntry = { loose?: string; strict: Array<[dataText: string, type: string]> };
 
+/** Each distinct data type once, as a local alias; entries would otherwise repeat kilobytes of it. */
 export const renderResolved = (entries: Map<string, LookupEntry>): string => {
+	const aliases = new Map<string, string>();
+	const alias = (dataText: string) => {
+		const existing = aliases.get(dataText);
+		if (existing) return existing;
+		const name = `D${aliases.size}`;
+		aliases.set(dataText, name);
+		return name;
+	};
 	const lines = [...entries.entries()]
 		.sort(([a], [b]) => a.localeCompare(b))
 		.map(([key, e]) => {
-			const strict = e.strict.map(([d, t]) => `[${d}, ${t}]`).join(', ');
+			const strict = e.strict.map(([d, t]) => `[${alias(d)}, ${t}]`).join(', ');
 			return `\t\t${JSON.stringify(key)}: { loose: ${e.loose ?? 'any'}; strict: [${strict}] };`;
 		});
-	return `// Generated from expr() and resolve() sites. Do not edit.\ndeclare global {\n\tinterface N8nResolvedTypes {\n${lines.join('\n')}\n\t}\n}\nexport {};\n`;
+	const aliasLines = [...aliases.entries()].map(([text, name]) => `type ${name} = ${text};`);
+	return [
+		'// Generated from expr() and resolve() sites by @n8n/expression-types. Do not edit.',
+		...aliasLines,
+		'declare global {',
+		'\tinterface N8nResolvedTypes {',
+		...lines,
+		'\t}',
+		'}',
+		'export {};',
+		'',
+	].join('\n');
 };
 
 /**

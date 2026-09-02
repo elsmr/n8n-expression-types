@@ -2,9 +2,10 @@
 // Inside a {{ }} block it forwards TypeScript's own hover, completions, signature help,
 // quick fixes, inlay hints and semantic classifications from the virtual file, with
 // positions mapped back. It adds block and expression types, n8n's sandbox rules, and
-// keeps <project>/n8n-resolved.d.ts in sync so resolved types flow while you type.
+// keeps the lookup that makes resolved types flow in sync while you type. The lookup is
+// served to the host program from memory as an extra root file (the technique Volar uses);
+// nothing is written to disk. CI gets the same through check.ts, a tsc wrapper.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type TS from 'typescript';
 import { createExpressionService, type Analysis, type RuntimeShape } from '@n8n/expression-types/service';
@@ -59,19 +60,36 @@ const init = (modules: { typescript: typeof TS }) => {
 			it.analysis.blocks.find((b) => position >= it.textStart + b.start && position <= it.textStart + b.end);
 
 		const resolvedByFile = new Map<string, Item[]>();
-		const resolvedPath = path.join(projectDir, 'n8n-resolved.d.ts');
+		const resolvedFile = path.join(projectDir, '__n8n-expressions-lookup__.d.ts');
+		let resolvedText = renderResolved(new Map());
+		let resolvedVersion = 1;
+
+		// The host program sees the lookup as a root file served from memory, so no tsconfig
+		// entry is needed and a change is a version bump rather than a disk round-trip.
+		const lsHost = info.languageServiceHost;
+		const origFileNames = lsHost.getScriptFileNames.bind(lsHost);
+		const origVersion = lsHost.getScriptVersion.bind(lsHost);
+		const origSnapshot = lsHost.getScriptSnapshot.bind(lsHost);
+		lsHost.getScriptFileNames = () => {
+			const names = origFileNames();
+			return names.includes(resolvedFile) ? names : [...names, resolvedFile];
+		};
+		lsHost.getScriptVersion = (f) => (f === resolvedFile ? String(resolvedVersion) : origVersion(f));
+		lsHost.getScriptSnapshot = (f) => (f === resolvedFile ? ts.ScriptSnapshot.fromString(resolvedText) : origSnapshot(f));
+
 		const syncResolved = (fileName: string, items: Item[]) => {
 			const mine = items.filter((i) => i.kind !== 'slot');
 			if (mine.length === 0 && !resolvedByFile.has(fileName)) return;
 			resolvedByFile.set(fileName, mine);
 			// Recompute across files so a resolve() in one file types an expr() in another.
-			const all = lookupEntries([...resolvedByFile.values()].flat());
-			const next = renderResolved(all);
-			const current = existsSync(resolvedPath) ? readFileSync(resolvedPath, 'utf8') : '';
-			if (next !== current) {
-				writeFileSync(resolvedPath, next);
-				log(`wrote ${resolvedPath} (${all.size} expressions)`);
-			}
+			const next = renderResolved(lookupEntries([...resolvedByFile.values()].flat()));
+			if (next === resolvedText) return;
+			resolvedText = next;
+			resolvedVersion++;
+			const project = info.project as { markAsDirty?: () => void; refreshDiagnostics?: () => void };
+			project.markAsDirty?.();
+			project.refreshDiagnostics?.();
+			log(`lookup updated (${resolvedVersion})`);
 		};
 
 		const proxy: TS.LanguageService = Object.create(null);

@@ -15,10 +15,11 @@ provides n8n's extension methods. Types, diagnostics, completions, quick fixes a
 signature help come out of the checker unchanged, with positions mapped back into the
 literal.
 
-Result types reach the host program through a generated global interface,
-`N8nResolvedTypes`, keyed by `context::text`. The plugin rewrites the file while you
-type; `gen-resolved` does the same for CI. There is precedent for a plugin writing its
-own output in the GraphQL tooling world.
+Result types reach the host program through a global interface, `N8nResolvedTypes`,
+keyed by `context::text`. The plugin serves it to tsserver from memory as an extra root
+file, the technique Volar uses; `check.ts` wraps `tsc` the way `vue-tsc` does and injects
+the same for CI. Nothing is generated on disk. Each distinct data type appears once in the
+lookup as a local alias.
 
 ## Decisions
 
@@ -43,7 +44,7 @@ another. A site that fails is reported at that site and does not poison the othe
 **Two error types, no messages in generics.** `N8nInvalidExpression`: the text is wrong
 in its context, whatever the data. `N8nResolveError`: the expression is fine, this data
 does not fit. Both are unassignable. The messages are diagnostics, from the plugin in the
-editor and from `gen-resolved --fail-on-error` in CI.
+editor and from `check.ts` in CI.
 
 **Loose by default, strict against data.** A runtime hole with no shape is `any`, so
 `$json.anything.goes()` passes. Globals, contexts and methods on known types are still
@@ -70,6 +71,9 @@ that yields `string` is reported, when the slot type spells out primitives.
 - VS Code extension only: works in one editor; the plugin works in any tsserver editor and
   the extension bundles it.
 - Default context from `runtime.json`: silent wrong answers.
+- A generated `.d.ts` on disk, visible (gql.tada, TanStack Router) or under
+  `node_modules/@types` (Prisma-style): works, but the in-memory root file plus a tsc
+  wrapper needs neither a file nor a tsconfig entry.
 
 ## Cost
 
@@ -83,13 +87,15 @@ Measured against the real `nodes-base` corpus (1113 expression literals in 663 f
 | Whole corpus, one file each | 3 to 4 s |
 | Whole corpus, batched 200 blocks per virtual file | 0.1 to 0.2 s |
 | Static `$parameter` derivation, whole corpus | 11 ms |
-| `tsc` with a 2000-entry lookup | +0.2 s (was +13 s before the index-signature fix) |
+| `tsc` with a 2000-entry lookup | +0.3 s, +75 MB (was +13 s before the index-signature fix) |
+| `tsc` with a 5000-entry lookup | +0.6 s, +200 MB before data-type dedupe |
 | Plugin, one keystroke in a 31-expression file | 100 to 150 ms, synchronous on tsserver's thread |
 
-Analyses are cached per file version. The lookup is written from the diagnostics pass
-only, and only when its content changes. Looking keys up through `keyof N8nResolvedTypes`
-made every check quadratic in the entry count; an index signature for the missing-key
-case removed that.
+Analyses are cached per file version. The lookup is rebuilt from the diagnostics pass
+only, and the host program is only nudged when its content changes. Looking keys up
+through `keyof N8nResolvedTypes` made every check quadratic in the entry count; an index
+signature for the missing-key case removed that. Only `expr()` and `resolve()` sites add
+entries; branded slots, which is what `nodes-base` would use, add none.
 
 Done from the scaling review: index-signature lookup, statement mapping by name instead
 of index (a body that is not a single expression shifted later blocks), no lookup writes
@@ -105,6 +111,8 @@ Next for scale: batch all blocks of a file into one virtual file per shape. Meas
 - Sample-derived types produce false errors for fields the sample lacks; the loose default
   limits this to sites that pass data.
 - The lambda form serialises with `fn.toString()` and does not detect free variables.
+- `check.ts` builds the program twice (scan, then with the lookup); the second reuses
+  the first's source files, so it costs one extra checker pass.
 - 4% of `nodes-base` literals are concatenation fragments (`'={{ ... ' + x`) with no
   complete block; they are typed as their literal text.
 - `$parameter` ignores `displayOptions` and versions. `$self` is loose.

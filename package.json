@@ -5,9 +5,9 @@
   "scripts": {
     "open": "pnpm build:plugin && code --extensionDevelopmentPath=\"$PWD/packages/vscode\" \"$PWD/playground\" \"$PWD/playground/node-description.ts\"",
     "test": "pnpm build:plugin && tsx packages/plugin/plugin.test.ts",
-    "typecheck": "tsc -p packages/core && tsc -p packages/plugin && pnpm gen-resolved && tsc -p playground",
+    "typecheck": "tsc -p packages/core && tsc -p packages/plugin && pnpm check --expression-errors=warn",
+    "check": "tsx packages/core/check.ts playground/tsconfig.json",
     "drift": "tsx packages/core/drift.ts",
-    "gen-resolved": "tsx packages/core/gen-resolved.ts playground/tsconfig.json",
     "gen-extensions": "tsx packages/core/gen-extensions.ts",
     "vsix": "pnpm build:plugin && node scripts/build-vsix.mjs",
     "build:plugin": "pnpm --filter @n8n/expression-ts-plugin build",
