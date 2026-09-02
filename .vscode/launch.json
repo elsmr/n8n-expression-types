@@ -5,7 +5,11 @@
       "name": "Extension: playground",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/vscode", "${workspaceFolder}/playground"],
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/vscode",
+        "${workspaceFolder}/playground",
+        "${workspaceFolder}/playground/node-description.ts"
+      ],
       "preLaunchTask": "build plugin"
     }
   ]

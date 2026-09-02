@@ -22,7 +22,7 @@ pnpm smoke      # drives the editor plugin headless and prints what it would sho
 ```
 
 Or open the folder in VS Code and press F5. An Extension Development Host opens on
-`playground/`:
+`playground/` (see its README for a 5-step tour):
 
 - `node-description.ts`: a node definition with no markers at all. `$parameter.operaton`
   is underlined with "Did you mean 'operation'?", typed from the sibling `properties`.
