@@ -1,0 +1,15 @@
+{
+  "scopeName": "inline.n8n-expression.injection",
+  "injectionSelector": "L:source.ts string.quoted, L:source.ts string.template, L:source.tsx string.quoted, L:source.tsx string.template, L:source.js string.quoted, L:source.js string.template",
+  "patterns": [{ "include": "#block" }],
+  "repository": {
+    "block": {
+      "name": "meta.embedded.block.n8n-expression",
+      "begin": "\\{\\{",
+      "beginCaptures": { "0": { "name": "punctuation.definition.template-expression.begin.n8n-expression" } },
+      "end": "\\}\\}",
+      "endCaptures": { "0": { "name": "punctuation.definition.template-expression.end.n8n-expression" } },
+      "patterns": [{ "include": "source.ts" }]
+    }
+  }
+}

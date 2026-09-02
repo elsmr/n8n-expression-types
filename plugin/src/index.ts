@@ -15,10 +15,16 @@ type Item = Found & { analysis: Analysis };
 
 const EMPTY: RuntimeTypes = { input: { json: {} } };
 
+// A project lists the plugin in tsconfig and the VS Code extension injects it too:
+// the second create() for the same project must not decorate twice.
+const decorated = new WeakSet<object>();
+
 const init = (modules: { typescript: typeof TS }) => {
 	const ts = modules.typescript;
 
 	const create = (info: TS.server.PluginCreateInfo): TS.LanguageService => {
+		if (decorated.has(info.project)) return info.languageService;
+		decorated.add(info.project);
 		const ls = info.languageService;
 		const log = (m: string) => info.project.projectService.logger.info(`[n8n-expression] ${m}`);
 		const root = path.resolve(__dirname, '../..');

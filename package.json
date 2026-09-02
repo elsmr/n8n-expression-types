@@ -8,7 +8,8 @@
     "gen-extensions": "tsx gen-extensions.ts",
     "gen-resolved": "tsx gen-resolved.ts playground/tsconfig.json",
     "build:plugin": "pnpm --dir plugin build",
-    "smoke": "pnpm build:plugin && tsx plugin/smoke.ts"
+    "smoke": "pnpm build:plugin && tsx plugin/smoke.ts",
+    "prepare": "pnpm build:plugin"
   },
   "devDependencies": {
     "@types/luxon": "^3.7.5",
@@ -17,7 +18,7 @@
     "n8n-workflow": "^2.16.0",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
-    "n8n-expression-ts-plugin": "link:plugin"
+    "n8n-expression-ts-plugin": "workspace:*"
   },
   "dependencies": {
     "luxon": "^3.7.2"

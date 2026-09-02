@@ -1,0 +1,27 @@
+{
+  "name": "n8n-expressions",
+  "displayName": "n8n Expressions",
+  "description": "Syntax highlighting, type checking and completions for n8n expressions in TypeScript strings",
+  "version": "0.0.0",
+  "publisher": "elsmr",
+  "private": true,
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Programming Languages"],
+  "extensionDependencies": ["vscode.typescript-language-features"],
+  "contributes": {
+    "grammars": [
+      {
+        "scopeName": "inline.n8n-expression.injection",
+        "path": "./syntaxes/n8n-expression.injection.json",
+        "injectTo": ["source.ts", "source.tsx", "source.js", "source.jsx"],
+        "embeddedLanguages": { "meta.embedded.block.n8n-expression": "typescript" }
+      }
+    ],
+    "typescriptServerPlugins": [
+      { "name": "n8n-expression-ts-plugin", "enableForWorkspaceTypeScriptVersions": true }
+    ]
+  },
+  "dependencies": {
+    "n8n-expression-ts-plugin": "workspace:*"
+  }
+}

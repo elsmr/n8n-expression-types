@@ -11,8 +11,10 @@ pnpm demo         # service API examples
 pnpm typecheck    # root + playground with plain tsc
 ```
 
-Open the folder in VS Code and accept "Use workspace TypeScript version" (the plugin
-only loads with the workspace `typescript`).
+Two ways to get the plugin into VS Code: list it in tsconfig `plugins` and accept "Use
+workspace TypeScript version", or install the extension in `vscode/`, which injects it into
+any TypeScript version and adds highlighting. Both at once is fine; the plugin guards
+against decorating a project twice.
 
 TypeScript is pinned to 6.x on purpose. `typescript@7` (latest) is the Go compiler: its npm
 package has no `createLanguageService`, no `ts.server`, and no plugin model, only an
@@ -56,6 +58,7 @@ does the same for CI, since `tsc` loads no plugins.
 | `shape-from-type.ts` | `RuntimeShape` from the checker's type of a `runtime` argument. |
 | `scan.ts` | Finds expression literals in a source file; renders `n8n-resolved.d.ts`. |
 | `gen-resolved.ts` | CLI generator over a tsconfig. |
+| `vscode/` | VS Code extension: injection grammar for `{{ }}` in strings, and it loads the plugin via `typescriptServerPlugins` so no tsconfig entry is needed. F5 runs it on `playground/`. |
 | `plugin/` | tsserver plugin: diagnostics, hover, completions, inlay hints, auto-generation. `smoke.ts` runs it headless. |
 | `type-level.ts` | Original pure type-level resolver, `$json` paths only. |
 
