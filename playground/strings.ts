@@ -20,8 +20,8 @@ export const stamp = expr('={{ $now.toISO() }}');                               
 
 // Type only: the type an expression yields against specific data, without evaluating.
 export type NextUrl = Resolve<typeof nextUrl, typeof pagination>;                      // string
-export type NoNext = Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>; // N8nResolveError<"Property 'next' does not exist ...">
-export type BadGlobal = Resolve<typeof badGlobal, typeof runtime>;                      // N8nInvalidExpression<"Cannot find name '$pageCount'.">: wrong regardless of data
+export type NoNext = Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>; // N8nResolveError
+export type BadGlobal = Resolve<typeof badGlobal, typeof runtime>;                      // N8nInvalidExpression: wrong regardless of data
 export type Subject = Resolve<typeof subject, typeof runtime>;                          // string
 export type OrderId = Resolve<typeof orderId, typeof runtime>;                          // number
 

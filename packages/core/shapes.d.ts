@@ -88,13 +88,13 @@ declare global {
 		[key: string]: any;
 	}
 
-	/** The expression text is wrong on its own, in its context. Fix the expression. */
-	interface N8nInvalidExpression<Message extends string> {
-		readonly __n8nInvalidExpression: Message;
+	/** The expression text is wrong on its own, in its context. The plugin or `gen-resolved` says why. */
+	interface N8nInvalidExpression {
+		readonly __n8nInvalidExpression: true;
 	}
-	/** The expression is fine, but the data it was resolved against does not fit. Fix the data or the expression. */
-	interface N8nResolveError<Message extends string> {
-		readonly __n8nResolveError: Message;
+	/** The expression is fine, but the data it was resolved against does not fit. */
+	interface N8nResolveError {
+		readonly __n8nResolveError: true;
 	}
 }
 

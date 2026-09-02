@@ -149,11 +149,12 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
 /**
  * Type text for the generated lookup: the value type, or an error type. Without data
  * an error means the text is invalid; against data it means the data does not fit.
+ * The messages themselves are diagnostics (plugin, gen-resolved), not types.
  */
 export const resolvedType = (a: Analysis, against: 'definition' | 'data' = 'definition'): string => {
-	const error = a.blocks.flatMap((b) => b.errors)[0];
-	if (!error) return a.type;
-	return `${against === 'data' ? 'N8nResolveError' : 'N8nInvalidExpression'}<${JSON.stringify(error.message)}>`;
+	const failed = a.blocks.some((b) => b.errors.length > 0) || !!a.slotError;
+	if (!failed) return a.type;
+	return against === 'data' ? 'N8nResolveError' : 'N8nInvalidExpression';
 };
 
 export type LookupEntry = { loose?: string; strict: Array<[dataText: string, type: string]> };
@@ -185,21 +186,37 @@ export const lookupEntries = (items: Array<Found & { analysis: Analysis }>): Map
 	}
 	// An expression that is invalid on its own cannot resolve against anything.
 	for (const e of out.values()) {
-		if (e.loose?.startsWith('N8nInvalidExpression<')) e.strict = e.strict.map(([d]) => [d, e.loose!]);
+		if (e.loose === 'N8nInvalidExpression') e.strict = e.strict.map(([d]) => [d, e.loose!]);
 	}
 	return out;
 };
 
-/** Lookup entries for the given files. */
+export type Report = { file: string; line: number; message: string };
+
+/** Human-readable diagnostics for analysed items, for the CLI. */
+export const reports = (ts: typeof TS, items: Array<Found & { analysis: Analysis }>): Report[] =>
+	items.flatMap((it) => {
+		const sf = it.node.getSourceFile();
+		const at = it.reportAt?.start ?? it.textStart;
+		const line = ts.getLineAndCharacterOfPosition(sf, at).line + 1;
+		const prefix = it.reportAt ? 'against this data: ' : '';
+		const messages = [
+			...it.analysis.blocks.flatMap((b) => b.errors.map((e) => e.message)),
+			...(it.analysis.slotError ? [it.analysis.slotError] : []),
+		];
+		return messages.map((m) => ({ file: sf.fileName, line, message: prefix + m }));
+	});
+
+/** Lookup entries and diagnostics for the given files. */
 export const collectResolved = (
 	ts: typeof TS,
 	service: ExpressionService,
 	program: TS.Program,
 	files = program.getSourceFiles().filter((f) => !f.isDeclarationFile && !f.fileName.includes('/node_modules/')),
-): Map<string, LookupEntry> => {
+) => {
 	const checker = program.getTypeChecker();
 	const items = files.flatMap((sf) =>
 		findExpressions(ts, sf, checker).map((f) => ({ ...f, analysis: service.analyze(f.expression, f.shape, f.expected) })),
 	);
-	return lookupEntries(items);
+	return { entries: lookupEntries(items), reports: reports(ts, items) };
 };

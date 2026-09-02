@@ -47,7 +47,7 @@ const typo  = expr('={{ $json.test.toUppercase() }}');
 `Resolve<typeof expression, typeof data>` is the same check as a type, without a call. The plugin
 checks the expression against `data` at the call, and the generated lookup takes the
 type from there: `total` above is `Expression<number>` once `resolve(total, runtime)`
-exists, `typo` becomes `Expression<N8nInvalidExpression<...>>`, and an expression that
+exists, `resolve(typo, runtime)` is `N8nResolveError`, and an expression that
 is never resolved keeps its loose definition-time type. The plugin writes
 `<project>/n8n-resolved.d.ts`; `pnpm gen-resolved` does the same for CI.
 
@@ -61,10 +61,11 @@ is never resolved keeps its loose definition-time type. The plugin writes
 | `description` | core, description | `$parameter`, `$nodeVersion`, `$self`; no item data |
 | `credential` | core, credential | `$self`, `$secrets`; no item data |
 
-Two error types, both unassignable: `N8nInvalidExpression<msg>` means the text is wrong
-in its context regardless of data (syntax, unknown global, typo on a known method).
-`N8nResolveError<msg>` means the expression is fine but the data it was resolved against
-does not fit.
+Two error types, both unassignable: `N8nInvalidExpression` means the text is wrong in
+its context regardless of data (syntax, unknown global, typo on a known method).
+`N8nResolveError` means the expression is fine but the data it was resolved against does
+not fit. The messages are diagnostics, in the editor from the plugin and in CI from
+`gen-resolved` (`--fail-on-error` to gate).
 
 Shapes: a runtime/data argument when present, else what the surrounding code declares
 (`$parameter` from the enclosing `properties`, `$value` from the enclosing property),

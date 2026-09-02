@@ -508,9 +508,9 @@ var findExpressions = (ts, sf, checker) => {
   return found;
 };
 var resolvedType = (a, against = "definition") => {
-  const error = a.blocks.flatMap((b) => b.errors)[0];
-  if (!error) return a.type;
-  return `${against === "data" ? "N8nResolveError" : "N8nInvalidExpression"}<${JSON.stringify(error.message)}>`;
+  const failed = a.blocks.some((b) => b.errors.length > 0) || !!a.slotError;
+  if (!failed) return a.type;
+  return against === "data" ? "N8nResolveError" : "N8nInvalidExpression";
 };
 var renderResolved = (entries) => {
   const lines = [...entries.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, e]) => {
@@ -538,7 +538,7 @@ var lookupEntries = (items) => {
     }
   }
   for (const e of out.values()) {
-    if (e.loose?.startsWith("N8nInvalidExpression<")) e.strict = e.strict.map(([d]) => [d, e.loose]);
+    if (e.loose === "N8nInvalidExpression") e.strict = e.strict.map(([d]) => [d, e.loose]);
   }
   return out;
 };
