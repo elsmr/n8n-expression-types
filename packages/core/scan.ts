@@ -146,10 +146,14 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
 	return found;
 };
 
-/** Type text for the generated lookup: the value type, or an N8nInvalidExpression. */
-export const resolvedType = (a: Analysis): string => {
+/**
+ * Type text for the generated lookup: the value type, or an error type. Without data
+ * an error means the text is invalid; against data it means the data does not fit.
+ */
+export const resolvedType = (a: Analysis, against: 'definition' | 'data' = 'definition'): string => {
 	const error = a.blocks.flatMap((b) => b.errors)[0];
-	return error ? `N8nInvalidExpression<${JSON.stringify(error.message)}>` : a.type;
+	if (!error) return a.type;
+	return `${against === 'data' ? 'N8nResolveError' : 'N8nInvalidExpression'}<${JSON.stringify(error.message)}>`;
 };
 
 export type LookupEntry = { loose?: string; strict: Array<[dataText: string, type: string]> };
@@ -174,9 +178,14 @@ export const lookupEntries = (items: Array<Found & { analysis: Analysis }>): Map
 	for (const it of items) {
 		if (it.kind === 'slot') continue;
 		const key = resolvedKey(it.context, it.expression);
-		const type = resolvedType(it.analysis);
-		if (it.kind === 'call') entry(key).loose = type;
-		else if (it.dataText && !entry(key).strict.some(([d]) => d === it.dataText)) entry(key).strict.push([it.dataText, type]);
+		if (it.kind === 'call') entry(key).loose = resolvedType(it.analysis);
+		else if (it.dataText && !entry(key).strict.some(([d]) => d === it.dataText)) {
+			entry(key).strict.push([it.dataText, resolvedType(it.analysis, 'data')]);
+		}
+	}
+	// An expression that is invalid on its own cannot resolve against anything.
+	for (const e of out.values()) {
+		if (e.loose?.startsWith('N8nInvalidExpression<')) e.strict = e.strict.map(([d]) => [d, e.loose!]);
 	}
 	return out;
 };

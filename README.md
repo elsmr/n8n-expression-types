@@ -61,6 +61,11 @@ is never resolved keeps its loose definition-time type. The plugin writes
 | `description` | core, description | `$parameter`, `$nodeVersion`, `$self`; no item data |
 | `credential` | core, credential | `$self`, `$secrets`; no item data |
 
+Two error types, both unassignable: `N8nInvalidExpression<msg>` means the text is wrong
+in its context regardless of data (syntax, unknown global, typo on a known method).
+`N8nResolveError<msg>` means the expression is fine but the data it was resolved against
+does not fit.
+
 Shapes: a runtime/data argument when present, else what the surrounding code declares
 (`$parameter` from the enclosing `properties`, `$value` from the enclosing property),
 else `N8nLooseJson` (`any`): JSON-legal, unchecked.

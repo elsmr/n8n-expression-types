@@ -20,7 +20,8 @@ export const stamp = expr('={{ $now.toISO() }}');                               
 
 // Type only: the type an expression yields against specific data, without evaluating.
 export type NextUrl = Resolve<typeof nextUrl, typeof pagination>;                      // string
-export type NoNext = Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>; // N8nInvalidExpression<"Property 'next' does not exist ...">
+export type NoNext = Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>; // N8nResolveError<"Property 'next' does not exist ...">
+export type BadGlobal = Resolve<typeof badGlobal, typeof runtime>;                      // N8nInvalidExpression<"Cannot find name '$pageCount'.">: wrong regardless of data
 export type Subject = Resolve<typeof subject, typeof runtime>;                          // string
 export type OrderId = Resolve<typeof orderId, typeof runtime>;                          // number
 
@@ -30,11 +31,13 @@ export const check = () => {
 	const b: string = resolve(subject, runtime);
 	const c: number = resolve(total, runtime);
 	const d: string = resolve(nextUrl, pagination);
-	// @ts-expect-error 'next' does not exist on this body: N8nInvalidExpression<...>
+	// @ts-expect-error 'next' does not exist on this body: N8nResolveError<...>
 	const e: string = resolve(nextUrl, { ...pagination, response: { items: [] } });
 	// @ts-expect-error $json.nothing is null
 	const f: unknown[] = [resolve(nullable, runtime).x];
-	// @ts-expect-error invalid expression cannot be used
+	// @ts-expect-error N8nResolveError: toUppercase is not on string
 	const g: string = resolve(typo, runtime);
-	return [a, b, c, d, e, f, g];
+	// @ts-expect-error N8nInvalidExpression: $pageCount does not exist in nodeParameter, whatever the data
+	const h: number = resolve(badGlobal, runtime);
+	return [a, b, c, d, e, f, g, h];
 };

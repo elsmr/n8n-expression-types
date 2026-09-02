@@ -507,9 +507,10 @@ var findExpressions = (ts, sf, checker) => {
   visit(sf);
   return found;
 };
-var resolvedType = (a) => {
+var resolvedType = (a, against = "definition") => {
   const error = a.blocks.flatMap((b) => b.errors)[0];
-  return error ? `N8nInvalidExpression<${JSON.stringify(error.message)}>` : a.type;
+  if (!error) return a.type;
+  return `${against === "data" ? "N8nResolveError" : "N8nInvalidExpression"}<${JSON.stringify(error.message)}>`;
 };
 var renderResolved = (entries) => {
   const lines = [...entries.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, e]) => {
@@ -531,9 +532,13 @@ var lookupEntries = (items) => {
   for (const it of items) {
     if (it.kind === "slot") continue;
     const key = resolvedKey(it.context, it.expression);
-    const type = resolvedType(it.analysis);
-    if (it.kind === "call") entry(key).loose = type;
-    else if (it.dataText && !entry(key).strict.some(([d]) => d === it.dataText)) entry(key).strict.push([it.dataText, type]);
+    if (it.kind === "call") entry(key).loose = resolvedType(it.analysis);
+    else if (it.dataText && !entry(key).strict.some(([d]) => d === it.dataText)) {
+      entry(key).strict.push([it.dataText, resolvedType(it.analysis, "data")]);
+    }
+  }
+  for (const e of out.values()) {
+    if (e.loose?.startsWith("N8nInvalidExpression<")) e.strict = e.strict.map(([d]) => [d, e.loose]);
   }
   return out;
 };

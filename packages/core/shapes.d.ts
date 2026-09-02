@@ -88,9 +88,13 @@ declare global {
 		[key: string]: any;
 	}
 
-	/** The type of an expression the checker rejected. Assigning it anywhere fails. */
+	/** The expression text is wrong on its own, in its context. Fix the expression. */
 	interface N8nInvalidExpression<Message extends string> {
 		readonly __n8nInvalidExpression: Message;
+	}
+	/** The expression is fine, but the data it was resolved against does not fit. Fix the data or the expression. */
+	interface N8nResolveError<Message extends string> {
+		readonly __n8nResolveError: Message;
 	}
 }
 
