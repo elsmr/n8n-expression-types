@@ -9,29 +9,32 @@ export const loose = expr('={{ $json.whatever.you.like.toTitleCase() }}');      
 export const badGlobal = expr('={{ $pageCount }}');                                  // error: not in nodeParameter
 export const paged = expr.httpPagination('={{ $response.body.next ?? $request.url }}'); // string, body loose
 
-// Declared without data. Their types come from the resolve() calls below.
-export const orderId = expr("={{ $('Webhook').item.json.body.orderId }}");          // number, via resolve(orderId, runtime)
-export const subject = expr('=Order {{ $json.n }} for {{ $json.user.name }}');      // string
-export const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');        // number
-export const nextUrl = expr.httpPagination('={{ $response.body.next }}');           // string
-export const typo = expr('={{ $json.test.toUppercase() }}');                        // N8nInvalidExpression<...>
-export const nullable = expr('={{ $json.nothing.x }}');                              // N8nInvalidExpression<...>
-export const unused = expr('={{ $json.n * 2 }}');                                    // any: never resolved, $json loose
+// Declared without data: definition-time types, runtime holes loose.
+export const orderId = expr("={{ $('Webhook').item.json.body.orderId }}");          // Expression<any>
+export const subject = expr('=Order {{ $json.n }} for {{ $json.user.name }}');      // Expression<string>: text around blocks
+export const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');        // Expression<any>
+export const nextUrl = expr.httpPagination('={{ $response.body.next }}');           // Expression<any, 'httpPagination'>
+export const typo = expr('={{ $json.test.toUppercase() }}');                        // Expression<any>: $json.test is loose here
+export const nullable = expr('={{ $json.nothing.x }}');                              // Expression<any>
+export const stamp = expr('={{ $now.toISO() }}');                                    // Expression<string | null>: no runtime hole
 
-// Type only: check an expression against data without evaluating it.
+// Type only: the type an expression yields against specific data, without evaluating.
 export type NextUrl = Resolve<typeof nextUrl, typeof pagination>;                      // string
-export type NoNext = Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>; // plugin: 'next' does not exist
+export type NoNext = Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>; // N8nInvalidExpression<"Property 'next' does not exist ...">
 export type Subject = Resolve<typeof subject, typeof runtime>;                          // string
+export type OrderId = Resolve<typeof orderId, typeof runtime>;                          // number
 
 // Evaluation: data enters here. The plugin checks each expression against it.
 export const check = () => {
-	const a: number = resolve(orderId, runtime);
+	const a = resolve(orderId, runtime);
 	const b: string = resolve(subject, runtime);
 	const c: number = resolve(total, runtime);
 	const d: string = resolve(nextUrl, pagination);
-	const e = resolve(nextUrl, { ...pagination, response: { items: [] } });   // plugin: 'next' does not exist on body
-	resolve(nullable, runtime);
+	// @ts-expect-error 'next' does not exist on this body: N8nInvalidExpression<...>
+	const e: string = resolve(nextUrl, { ...pagination, response: { items: [] } });
+	// @ts-expect-error $json.nothing is null
+	const f: unknown[] = [resolve(nullable, runtime).x];
 	// @ts-expect-error invalid expression cannot be used
-	const f: string = resolve(typo, runtime);
-	return [a, b, c, d, e, f];
+	const g: string = resolve(typo, runtime);
+	return [a, b, c, d, e, f, g];
 };

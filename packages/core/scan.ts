@@ -23,14 +23,24 @@ export type Found = {
 	expected?: string;
 	/** Where to report for resolve() calls whose literal lives elsewhere. */
 	reportAt?: { start: number; length: number };
+	/** The data type at a resolve() site, as text, when it only uses portable names. */
+	dataText?: string;
 };
 
 const isContext = (s: string | undefined): s is ExpressionContext =>
 	(EXPRESSION_CONTEXTS as readonly string[]).includes(s ?? '');
 
-// Only primitives, literals, unions and arrays; anything named would not resolve in the virtual project.
-const SAFE_EXPECTED = /^[\w\s|&'"<>[\](),.:?-]*$/;
-const safeExpected = (text: string) => (SAFE_EXPECTED.test(text) && !/\b[A-Z]\w*\b(?!['"])/.test(text.replace(/'[^']*'|"[^"]*"/g, '')) ? text : undefined);
+// Type text that only uses names every project resolves: primitives, literals, unions,
+// arrays, objects, and a few built-in generics. Anything else is not portable.
+const PORTABLE_NAMES = new Set(['Array', 'ReadonlyArray', 'Record', 'Partial', 'Readonly', 'Date']);
+const portable = (text: string): string | undefined => {
+	const stripped = text
+		.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, '""')
+		.replace(/[\w$]+\s*\??:/g, ':'); // property keys are not type names
+	const names = stripped.match(/\b[A-Z]\w*\b/g) ?? [];
+	return names.every((n) => PORTABLE_NAMES.has(n)) ? text : undefined;
+};
+const safeExpected = portable;
 
 /** Expression<T, C> brand on a type or one of its union members. */
 const brandOf = (ts: typeof TS, checker: TS.TypeChecker, type: TS.Type | undefined) => {
@@ -79,6 +89,23 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
 	const push = (f: Omit<Found, 'expression' | 'textStart'>) =>
 		found.push({ ...f, expression: f.node.text, textStart: f.node.getStart(sf) + 1 });
 
+	const pushResolve = (
+		behind: { literal: TS.StringLiteralLike; context: ExpressionContext | undefined },
+		dataType: TS.Type,
+		site: TS.Node,
+	) => {
+		const context = behind.context ?? 'nodeParameter';
+		const shape = shapeFromType(ts, checker, dataType, context);
+		push({
+			kind: 'resolve',
+			node: behind.literal,
+			context: shape.context,
+			shape,
+			reportAt: { start: site.getStart(sf), length: site.getWidth(sf) },
+			dataText: portable(checker.typeToString(dataType, undefined, ts.TypeFormatFlags.NoTruncation)),
+		});
+	};
+
 	const visit = (node: TS.Node) => {
 		if (ts.isCallExpression(node)) {
 			const callee = node.expression;
@@ -92,32 +119,14 @@ export const findExpressions = (ts: typeof TS, sf: TS.SourceFile, checker: TS.Ty
 			if (ts.isIdentifier(callee) && callee.text === 'resolve' && first && second) {
 				const behind = literalBehind(ts, checker, first);
 				if (behind) {
-					const context = behind.context ?? 'nodeParameter';
-					const shape = shapeFromType(ts, checker, checker.getTypeAtLocation(second), context);
-					push({
-						kind: 'resolve',
-						node: behind.literal,
-						context: shape.context,
-						shape,
-						reportAt: { start: node.getStart(sf), length: node.getWidth(sf) },
-					});
+					pushResolve(behind, checker.getTypeAtLocation(second), node);
 				}
 			}
 		} else if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === 'Resolve') {
 			const [exprArg, dataArg] = node.typeArguments ?? [];
 			if (exprArg && dataArg && ts.isTypeQueryNode(exprArg) && ts.isIdentifier(exprArg.exprName)) {
 				const behind = literalBehind(ts, checker, exprArg.exprName);
-				if (behind) {
-					const context = behind.context ?? 'nodeParameter';
-					const shape = shapeFromType(ts, checker, checker.getTypeFromTypeNode(dataArg), context);
-					push({
-						kind: 'resolve',
-						node: behind.literal,
-						context: shape.context,
-						shape,
-						reportAt: { start: node.getStart(sf), length: node.getWidth(sf) },
-					});
-				}
+				if (behind) pushResolve(behind, checker.getTypeFromTypeNode(dataArg), node);
 			}
 		} else if (ts.isStringLiteralLike(node) && node.text.startsWith('=')) {
 			const brand = brandOf(ts, checker, checker.getContextualType(node as TS.Expression));
@@ -143,34 +152,32 @@ export const resolvedType = (a: Analysis): string => {
 	return error ? `N8nInvalidExpression<${JSON.stringify(error.message)}>` : a.type;
 };
 
-export const renderResolved = (entries: Map<string, string>): string => {
+export type LookupEntry = { loose?: string; strict: Array<[dataText: string, type: string]> };
+
+export const renderResolved = (entries: Map<string, LookupEntry>): string => {
 	const lines = [...entries.entries()]
 		.sort(([a], [b]) => a.localeCompare(b))
-		.map(([key, type]) => `\t\t${JSON.stringify(key)}: ${type};`);
-	return `// Generated from expr() calls. Do not edit.\ndeclare global {\n\tinterface N8nResolvedTypes {\n${lines.join('\n')}\n\t}\n}\nexport {};\n`;
+		.map(([key, e]) => {
+			const strict = e.strict.map(([d, t]) => `[${d}, ${t}]`).join(', ');
+			return `\t\t${JSON.stringify(key)}: { loose: ${e.loose ?? 'any'}; strict: [${strict}] };`;
+		});
+	return `// Generated from expr() and resolve() sites. Do not edit.\ndeclare global {\n\tinterface N8nResolvedTypes {\n${lines.join('\n')}\n\t}\n}\nexport {};\n`;
 };
 
 /**
- * Lookup entries from analysed items. A resolve() call knows the data, so its type wins
- * over the loose type of the expr() declaration; several resolve() sites union.
+ * Lookup entries from analysed items: the loose type from the expr() declaration, and
+ * one [dataType, result] pair per resolve()/Resolve<> site whose data type is portable.
  */
-export const lookupEntries = (items: Array<Found & { analysis: Analysis }>): Map<string, string> => {
-	const strict = new Map<string, { valid: Set<string>; invalid: Set<string> }>();
-	const loose = new Map<string, string>();
+export const lookupEntries = (items: Array<Found & { analysis: Analysis }>): Map<string, LookupEntry> => {
+	const out = new Map<string, LookupEntry>();
+	const entry = (key: string) => out.get(key) ?? out.set(key, { strict: [] }).get(key)!;
 	for (const it of items) {
+		if (it.kind === 'slot') continue;
 		const key = resolvedKey(it.context, it.expression);
-		if (it.kind === 'resolve') {
-			const entry = strict.get(key) ?? { valid: new Set<string>(), invalid: new Set<string>() };
-			const type = resolvedType(it.analysis);
-			(type.startsWith('N8nInvalidExpression<') ? entry.invalid : entry.valid).add(type);
-			strict.set(key, entry);
-		} else if (it.kind === 'call') {
-			loose.set(key, resolvedType(it.analysis));
-		}
+		const type = resolvedType(it.analysis);
+		if (it.kind === 'call') entry(key).loose = type;
+		else if (it.dataText && !entry(key).strict.some(([d]) => d === it.dataText)) entry(key).strict.push([it.dataText, type]);
 	}
-	// A site that fails is reported at that site; it must not poison the sites that pass.
-	const out = new Map(loose);
-	for (const [key, { valid, invalid }] of strict) out.set(key, [...(valid.size ? valid : invalid)].join(' | '));
 	return out;
 };
 
@@ -180,7 +187,7 @@ export const collectResolved = (
 	service: ExpressionService,
 	program: TS.Program,
 	files = program.getSourceFiles().filter((f) => !f.isDeclarationFile && !f.fileName.includes('/node_modules/')),
-): Map<string, string> => {
+): Map<string, LookupEntry> => {
 	const checker = program.getTypeChecker();
 	const items = files.flatMap((sf) =>
 		findExpressions(ts, sf, checker).map((f) => ({ ...f, analysis: service.analyze(f.expression, f.shape, f.expected) })),

@@ -410,8 +410,13 @@ var expr = Object.assign(
 
 // ../core/scan.ts
 var isContext = (s) => EXPRESSION_CONTEXTS.includes(s ?? "");
-var SAFE_EXPECTED = /^[\w\s|&'"<>[\](),.:?-]*$/;
-var safeExpected = (text) => SAFE_EXPECTED.test(text) && !/\b[A-Z]\w*\b(?!['"])/.test(text.replace(/'[^']*'|"[^"]*"/g, "")) ? text : void 0;
+var PORTABLE_NAMES = /* @__PURE__ */ new Set(["Array", "ReadonlyArray", "Record", "Partial", "Readonly", "Date"]);
+var portable = (text) => {
+  const stripped = text.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, '""').replace(/[\w$]+\s*\??:/g, ":");
+  const names = stripped.match(/\b[A-Z]\w*\b/g) ?? [];
+  return names.every((n) => PORTABLE_NAMES.has(n)) ? text : void 0;
+};
+var safeExpected = portable;
 var brandOf = (ts, checker, type) => {
   if (!type) return void 0;
   for (const t of type.isUnion() ? type.types : [type]) {
@@ -451,6 +456,18 @@ var literalBehind = (ts, checker, arg) => {
 var findExpressions = (ts, sf, checker) => {
   const found = [];
   const push = (f) => found.push({ ...f, expression: f.node.text, textStart: f.node.getStart(sf) + 1 });
+  const pushResolve = (behind, dataType, site) => {
+    const context = behind.context ?? "nodeParameter";
+    const shape = shapeFromType(ts, checker, dataType, context);
+    push({
+      kind: "resolve",
+      node: behind.literal,
+      context: shape.context,
+      shape,
+      reportAt: { start: site.getStart(sf), length: site.getWidth(sf) },
+      dataText: portable(checker.typeToString(dataType, void 0, ts.TypeFormatFlags.NoTruncation))
+    });
+  };
   const visit = (node) => {
     if (ts.isCallExpression(node)) {
       const callee = node.expression;
@@ -464,32 +481,14 @@ var findExpressions = (ts, sf, checker) => {
       if (ts.isIdentifier(callee) && callee.text === "resolve" && first && second) {
         const behind = literalBehind(ts, checker, first);
         if (behind) {
-          const context = behind.context ?? "nodeParameter";
-          const shape = shapeFromType(ts, checker, checker.getTypeAtLocation(second), context);
-          push({
-            kind: "resolve",
-            node: behind.literal,
-            context: shape.context,
-            shape,
-            reportAt: { start: node.getStart(sf), length: node.getWidth(sf) }
-          });
+          pushResolve(behind, checker.getTypeAtLocation(second), node);
         }
       }
     } else if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeName.text === "Resolve") {
       const [exprArg, dataArg] = node.typeArguments ?? [];
       if (exprArg && dataArg && ts.isTypeQueryNode(exprArg) && ts.isIdentifier(exprArg.exprName)) {
         const behind = literalBehind(ts, checker, exprArg.exprName);
-        if (behind) {
-          const context = behind.context ?? "nodeParameter";
-          const shape = shapeFromType(ts, checker, checker.getTypeFromTypeNode(dataArg), context);
-          push({
-            kind: "resolve",
-            node: behind.literal,
-            context: shape.context,
-            shape,
-            reportAt: { start: node.getStart(sf), length: node.getWidth(sf) }
-          });
-        }
+        if (behind) pushResolve(behind, checker.getTypeFromTypeNode(dataArg), node);
       }
     } else if (ts.isStringLiteralLike(node) && node.text.startsWith("=")) {
       const brand = brandOf(ts, checker, checker.getContextualType(node));
@@ -513,8 +512,11 @@ var resolvedType = (a) => {
   return error ? `N8nInvalidExpression<${JSON.stringify(error.message)}>` : a.type;
 };
 var renderResolved = (entries) => {
-  const lines = [...entries.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, type]) => `		${JSON.stringify(key)}: ${type};`);
-  return `// Generated from expr() calls. Do not edit.
+  const lines = [...entries.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, e]) => {
+    const strict = e.strict.map(([d, t]) => `[${d}, ${t}]`).join(", ");
+    return `		${JSON.stringify(key)}: { loose: ${e.loose ?? "any"}; strict: [${strict}] };`;
+  });
+  return `// Generated from expr() and resolve() sites. Do not edit.
 declare global {
 	interface N8nResolvedTypes {
 ${lines.join("\n")}
@@ -524,21 +526,15 @@ export {};
 `;
 };
 var lookupEntries = (items) => {
-  const strict = /* @__PURE__ */ new Map();
-  const loose = /* @__PURE__ */ new Map();
+  const out = /* @__PURE__ */ new Map();
+  const entry = (key) => out.get(key) ?? out.set(key, { strict: [] }).get(key);
   for (const it of items) {
+    if (it.kind === "slot") continue;
     const key = resolvedKey(it.context, it.expression);
-    if (it.kind === "resolve") {
-      const entry = strict.get(key) ?? { valid: /* @__PURE__ */ new Set(), invalid: /* @__PURE__ */ new Set() };
-      const type = resolvedType(it.analysis);
-      (type.startsWith("N8nInvalidExpression<") ? entry.invalid : entry.valid).add(type);
-      strict.set(key, entry);
-    } else if (it.kind === "call") {
-      loose.set(key, resolvedType(it.analysis));
-    }
+    const type = resolvedType(it.analysis);
+    if (it.kind === "call") entry(key).loose = type;
+    else if (it.dataText && !entry(key).strict.some(([d]) => d === it.dataText)) entry(key).strict.push([it.dataText, type]);
   }
-  const out = new Map(loose);
-  for (const [key, { valid, invalid }] of strict) out.set(key, [...valid.size ? valid : invalid].join(" | "));
   return out;
 };
 
