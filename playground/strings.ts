@@ -19,7 +19,7 @@ export const typo = expr('={{ $json.test.toUppercase() }}');                    
 export const nullable = expr('={{ $json.nothing.x }}');
 export const title = expr('={{ $json.test.toTitleCase() }}');
 export const stamp = expr('={{ $now.toISO() }}');                                    // Resolve<typeof stamp, {}> is string | null
-export const stamp = expr('={{ $now }}');                                    // Resolve<typeof stamp, {}> is string | null
+export const now = expr('={{ $now }}');                                             // a DateTime, no runtime hole
 
 // Type only: the type an expression yields against specific data, without evaluating.
 export type NextUrl = Resolve<typeof nextUrl, typeof pagination>;                      // string
