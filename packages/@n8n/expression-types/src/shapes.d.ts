@@ -113,7 +113,7 @@ declare global {
 		[key: string]: any;
 	}
 
-	/** The expression text is wrong on its own, in its context. The plugin or `typegen` says why. */
+	/** The expression text is wrong on its own, in its context. The plugin or `check` says why. */
 	interface N8nInvalidExpression {
 		readonly __n8nInvalidExpression: true;
 	}

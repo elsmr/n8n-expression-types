@@ -9,7 +9,7 @@
 //   Resolve<typeof expression, typeof data>       same, type only
 //
 // String: TypeScript cannot parse it, so the types come from `N8nResolvedTypes`, a lookup
-// the plugin writes while you type and `typegen` writes for CI. The text lives in the
+// the plugin writes while you type and `check` writes for CI. The text lives in the
 // brand because it is the only key into that lookup. Until filled, `any`.
 // Lambda: TypeScript checks the body against the context interface, runtime holes loose.
 // It is serialised to `={{ body }}` with fn.toString(), so it is checked once, here;
@@ -69,7 +69,7 @@ export type Resolved<C extends ContextType, E extends string> = EntryOf<C, E>['l
 
 /** What expr() returns: the text E declared as an expression in context C. Its type is derived, not shown. */
 export type Expr<C extends ContextType, E extends string> = Marked<Resolved<C, E>, C, E>;
-/** Same, when the text is wrong in its context. The plugin or `typegen` says why. */
+/** Same, when the text is wrong in its context. The plugin or `check` says why. */
 export type InvalidExpr<C extends ContextType, E extends string> = Marked<
 	N8nInvalidExpression,
 	C,

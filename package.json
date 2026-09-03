@@ -7,10 +7,10 @@
     "dev": "pnpm build && pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "test": "pnpm build && tsx packages/@n8n/expression-ts-plugin/plugin.test.ts && tsx packages/@n8n/expression-ts-plugin/tsserver.test.ts",
-    "typecheck": "biome format . && pnpm build && pnpm typegen && tsc -p packages/@n8n/expression-ts-plugin && tsc -p playground",
-    "typegen": "node packages/@n8n/expression-ts-plugin/dist/cli.mjs typegen playground/tsconfig.json --expression-errors=warn",
+    "typecheck": "biome format . && pnpm build && pnpm check && tsc -p packages/@n8n/expression-ts-plugin && tsc -p playground",
+    "check": "node packages/@n8n/expression-ts-plugin/dist/cli.mjs check playground/tsconfig.json --expression-errors=warn",
     "gen-extensions": "tsx scripts/gen-extensions.ts",
-    "prepare": "pnpm build && pnpm typegen",
+    "prepare": "pnpm build && pnpm check",
     "format": "biome format --write ."
   },
   "devDependencies": {

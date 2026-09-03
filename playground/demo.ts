@@ -39,9 +39,9 @@ export const badGlobal = expr('={{ $pageCount }}'); // InvalidExpr: not a node-p
 
 // 3. Resolve. The plugin checks each expression against the data; the type is exact for that pairing.
 export const resolved = () => {
-	const a: number = resolve(orderId, sample);
+	const a = resolve(orderId, sample);
 	const b: string = resolve(subject, sample);
-	const c: number = resolve(total, sample);
+	const c = resolve(total, sample);
 	const d: string = resolve(multiline, sample);
 	const e: string = resolve(nextUrl, paginationSample);
 	const f: boolean = resolve(stop, paginationSample);

@@ -1,7 +1,7 @@
 // The lookup is a hidden, gitignored file in the project, picked up by an `include` glob
 // so a fresh clone type-checks before anything has run (missing keys fall back to `any`).
 // tsserver needs a real file behind every root, so the plugin writes the same file that
-// `n8n-expressions typegen` writes for plain tsc.
+// `n8n-expressions check` writes for plain tsc.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 

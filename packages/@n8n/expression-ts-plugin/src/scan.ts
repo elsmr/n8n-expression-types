@@ -181,7 +181,7 @@ export const findExpressions = (
 /**
  * Type text for the lookup: the value type, or an error type. Without data an error means
  * the text is invalid; against data it means the data does not fit. The messages
- * themselves are diagnostics (plugin, typegen), not types.
+ * themselves are diagnostics (plugin, check), not types.
  */
 export const resolvedType = (
 	a: Analysis,
@@ -248,20 +248,45 @@ export const lookupEntries = (
 	return out;
 };
 
-export type Report = { file: string; line: number; message: string };
-
-/** Human-readable diagnostics for analysed items, for the CLI. */
-export const reports = (ts: typeof TS, items: Array<Found & { analysis: Analysis }>): Report[] =>
+/**
+ * TypeScript diagnostics for analysed items, shared by the plugin and the CLI. Same codes as
+ * TypeScript's own, so they read as ts(2339) in the editor; sandbox rules are 90001.
+ */
+export const diagnostics = (
+	ts: typeof TS,
+	items: Array<Found & { analysis: Analysis }>,
+): TS.Diagnostic[] =>
 	items.flatMap((it) => {
-		const sf = it.node.getSourceFile();
-		const at = it.reportAt?.start ?? it.textStart;
-		const line = ts.getLineAndCharacterOfPosition(sf, at).line + 1;
-		const prefix = it.reportAt ? 'against this data: ' : '';
-		const messages = [
-			...it.analysis.blocks.flatMap((b) => b.errors.map((e) => e.message)),
-			...(it.analysis.slotError ? [it.analysis.slotError] : []),
-		];
-		return messages.map((m) => ({ file: sf.fileName, line, message: prefix + m }));
+		const file = it.node.getSourceFile();
+		const diag = (
+			start: number,
+			length: number,
+			messageText: string,
+			code: number,
+		): TS.Diagnostic => ({
+			file,
+			start,
+			length,
+			messageText,
+			category: ts.DiagnosticCategory.Error,
+			code,
+			...(code === 90001 ? { source: 'n8n' } : {}),
+		});
+		const errors = it.analysis.blocks.flatMap((b) => b.errors);
+		// resolve() re-checks a literal declared elsewhere: report at the call.
+		if (it.reportAt) {
+			const { start, length } = it.reportAt;
+			return errors.map((e) =>
+				diag(start, length, `${e.message} (in '${it.expression}' against this data)`, e.code),
+			);
+		}
+		const inBlocks = errors.map((e) =>
+			diag(it.textStart + e.start, Math.max(e.end - e.start, 1), e.message, e.code),
+		);
+		const slot = it.analysis.slotError
+			? [diag(it.node.getStart(), it.node.getWidth(), it.analysis.slotError, 2322)]
+			: [];
+		return [...inBlocks, ...slot];
 	});
 
 /** The files worth scanning: the project's own sources. */
@@ -284,5 +309,5 @@ export const collectResolved = (
 			analysis: service.analyze(f.expression, f.shape, f.expected),
 		})),
 	);
-	return { entries: lookupEntries(items), reports: reports(ts, items) };
+	return { entries: lookupEntries(items), diagnostics: diagnostics(ts, items) };
 };

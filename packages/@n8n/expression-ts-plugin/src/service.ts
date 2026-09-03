@@ -41,7 +41,10 @@ export const SANDBOX_RULES: Array<{ pattern: RegExp; message: string }> = [
 		pattern: /\b__proto__\b|\.\s*prototype\b/g,
 		message: 'n8n blocks prototype access in expressions.',
 	},
-	{ pattern: /\$(?![\w$]|\s*\()/g, message: 'Cannot access "$" without calling it as a function.' },
+	{
+		pattern: /\$(?![\w$]|\s*\(|\{)/g,
+		message: 'Cannot access "$" without calling it as a function.',
+	},
 	{
 		pattern: /\bclass\b[^{]*\bextends\b/g,
 		message: 'Cannot use dynamic class extension due to security concerns.',

@@ -2,3 +2,4 @@ node_modules/
 dist/
 .n8n/
 playground/_bench*
+playground/demo/

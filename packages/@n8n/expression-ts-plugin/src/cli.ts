@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// n8n-expressions typegen [tsconfig] [--expression-errors=warn]   (default: ./tsconfig.json)
-// Writes the expression lookup for a project and reports every expression diagnostic.
-// Run it before plain `tsc`. Expression diagnostics fail the run unless
+// n8n-expressions check [tsconfig] [--expression-errors=warn]   (default: ./tsconfig.json)
+// Reports every expression diagnostic in tsc's format and writes the expression lookup for
+// the project. Run it before plain `tsc`. Diagnostics fail the run unless
 // --expression-errors=warn is passed.
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -11,8 +11,8 @@ import { collectResolved, renderResolved } from './scan.ts';
 import { lookupFile, writeLookup } from './lookup-file.ts';
 
 const [command, ...args] = process.argv.slice(2);
-if (command !== 'typegen') {
-	console.error('usage: n8n-expressions typegen [tsconfig] [--expression-errors=warn]');
+if (command !== 'check') {
+	console.error('usage: n8n-expressions check [tsconfig] [--expression-errors=warn]');
 	process.exit(2);
 }
 const warnOnly = args.includes('--expression-errors=warn');
@@ -34,12 +34,19 @@ const root = path.dirname(
 	createRequire(import.meta.url).resolve('@n8n/expression-types/package.json'),
 );
 const service = createExpressionService({ ts, root });
-const { entries, reports } = collectResolved(ts, service, program);
+const { entries, diagnostics } = collectResolved(ts, service, program);
 const written = writeLookup(projectDir, renderResolved(entries));
 
-for (const r of reports)
-	console.log(`${path.relative(process.cwd(), r.file)}:${r.line}: ${r.message}`);
+const host: ts.FormatDiagnosticsHost = {
+	getCurrentDirectory: ts.sys.getCurrentDirectory,
+	getCanonicalFileName: (f) => f,
+	getNewLine: () => ts.sys.newLine,
+};
+const format = ts.sys.writeOutputIsTTY?.()
+	? ts.formatDiagnosticsWithColorAndContext
+	: ts.formatDiagnostics;
+process.stdout.write(format(diagnostics, host));
 console.log(
-	`${written ? 'wrote' : 'unchanged'} ${path.relative(process.cwd(), lookupFile(projectDir))}: ${entries.size} expressions, ${reports.length} expression diagnostics`,
+	`${written ? 'wrote' : 'unchanged'} ${path.relative(process.cwd(), lookupFile(projectDir))}: ${entries.size} expressions, ${diagnostics.length} expression diagnostics`,
 );
-process.exit(reports.length > 0 && !warnOnly ? 1 : 0);
+process.exit(diagnostics.length > 0 && !warnOnly ? 1 : 0);

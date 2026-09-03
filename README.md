@@ -42,7 +42,7 @@ const bad  = expr('={{ $pageCount }}');                           // InvalidExpr
 **`resolve()` and `Resolve<>` are where data enters.** The expression is checked against
 the data's type, and the result type is specific to that pairing. The lookup behind it is
 a hidden file, `.n8n/expressions.d.ts`, written by the plugin while you type and by
-`n8n-expressions typegen` before `tsc`. Plain `tsc`, no wrapper, nothing to commit.
+`n8n-expressions check` before `tsc`. Plain `tsc`, no wrapper, nothing to commit.
 
 ```ts
 const url: string = resolve(next, paginationSample);
@@ -79,7 +79,7 @@ colours. Works in any tsserver editor via tsconfig, or through the VS Code exten
    its errors, hover and completions are mapped back into the string.
 3. **Flow.** TypeScript cannot parse a string at the type level, so result types reach the
    program through a lookup interface keyed by context and text, written to
-   `.n8n/expressions.d.ts`. The plugin writes it while you type, `typegen` writes it before `tsc`.
+   `.n8n/expressions.d.ts`. The plugin writes it while you type, `check` writes it before `tsc`.
    Absent, resolved types are `any`.
 
 The globals per context follow `workflow-data-proxy.ts` and its callers; `extensions.d.ts`
@@ -117,10 +117,11 @@ Add `.n8n/` to `.gitignore`. Type the slots that hold expressions as `Expression
 use `expr()` for loose strings, `resolve()` where data exists. Then:
 
 ```sh
-n8n-expressions typegen && tsc
+n8n-expressions check && tsc
 ```
 
-`typegen` fails on broken expressions and writes the lookup that makes `tsc` exact. Without
+`check` reports broken expressions in tsc's format, at the string's position, and writes the
+lookup that makes `tsc` exact. Without
 it `tsc` still passes; resolved types are `any`.
 
 ## Repo
@@ -128,14 +129,14 @@ it `tsc` still passes; resolved types are `any`.
 | Path | What |
 | --- | --- |
 | `packages/@n8n/expression-types` | contexts, `expr`/`resolve`; what node code imports |
-| `packages/@n8n/expression-ts-plugin` | the tsserver plugin and the `n8n-expressions typegen` CLI |
+| `packages/@n8n/expression-ts-plugin` | the tsserver plugin and the `n8n-expressions check` CLI |
 | `packages/vscode-n8n-expressions` | VS Code extension: `{{ }}` highlighting, bundles the plugin |
 | `playground` | The tour and the type tests |
 | `scripts` | `gen-extensions`, the only code that reads `n8n-workflow` |
 
 ```sh
 pnpm test         # plugin behaviour, headless and against a real tsserver
-pnpm typecheck    # build, typegen, then plain tsc on plugin and playground
-pnpm typegen      # n8n-expressions typegen on the playground: lookup + expression report
+pnpm typecheck    # build, check, then plain tsc on plugin and playground
+pnpm check        # n8n-expressions check on the playground: expression report + lookup
 pnpm dev          # rebuild core and plugin on change
 ```

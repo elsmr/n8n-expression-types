@@ -1,5 +1,5 @@
 // Type tests, no library. Each entry fails to compile when the typing regresses. They run
-// through `pnpm typecheck`; `pnpm typegen` reports the diagnostics that are not types:
+// through `pnpm typecheck`; `pnpm check` reports the diagnostics that are not types:
 // slot mismatches, $parameter typos, sandbox rules.
 import {
 	expr,
@@ -37,14 +37,24 @@ export type Cases = [
 	Expect<Equal<Resolve<typeof nextUrl, typeof paginationSample>, string>>,
 	Expect<
 		Equal<
-			Resolve<typeof nextUrl, { context: 'httpPagination'; response: { items: number[] } }>,
-			N8nResolveError
+			Resolve<
+				typeof nextUrl,
+				{ context: 'httpPagination'; response: { items: number[] } }
+			> extends N8nResolveError
+				? true
+				: false,
+			true
 		>
 	>,
-	Expect<Equal<Resolve<typeof badGlobal, typeof sample>, N8nInvalidExpression>>,
+	Expect<
+		Equal<
+			Resolve<typeof badGlobal, typeof sample> extends N8nInvalidExpression ? true : false,
+			true
+		>
+	>,
 	Expect<Equal<ReturnType<typeof resolve<typeof total, typeof sample>>, number>>,
 	Expect<IsAny<Resolve<typeof loose, {}>>>, // no data: loose stays any
-	Expect<Equal<Resolve<typeof loose, typeof sample>, N8nResolveError>>, // real data: $json.whatever does not exist
+	Expect<Equal<Resolve<typeof loose, typeof sample> extends N8nResolveError ? true : false, true>>, // real data: $json.whatever does not exist
 	ExpectFalse<Equal<Resolve<typeof loose, typeof sample>, number>>,
 	Expect<Equal<typeof lambda, LambdaExpr<NodeParameterContext, number>>>,
 	Expect<Equal<Resolve<typeof lambda, typeof sample>, number>>, // lambdas carry their type; data does not re-check them

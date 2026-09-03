@@ -4,7 +4,7 @@
 // positions mapped back. It adds block and expression types, n8n's sandbox rules, and
 // keeps the lookup that makes resolved types flow in sync while you type. The lookup is a
 // real file under <project>/.n8n (tsserver rejects memory-only roots), added as a root
-// file here so no tsconfig entry is needed in the editor; `n8n-expressions typegen`
+// file here so no tsconfig entry is needed in the editor; `n8n-expressions check`
 // writes the same file for plain tsc.
 
 import path from 'node:path';
@@ -12,6 +12,7 @@ import { createRequire } from 'node:module';
 import type TS from 'typescript';
 import { createExpressionService, type Analysis } from './service.ts';
 import {
+	diagnostics,
 	findExpressions,
 	lookupEntries,
 	projectFiles,
@@ -87,7 +88,7 @@ const init = (modules: { typescript: typeof TS }) => {
 			return names.includes(lookupFile) ? names : [lookupFile, ...names];
 		};
 
-		// The whole project, not just open files: the same lookup `typegen` writes.
+		// The whole project, not just open files: the same lookup `check` writes.
 		const syncResolved = () => {
 			const next = renderResolved(lookupEntries(projectItems()));
 			if (next === lookupText) return;
@@ -113,46 +114,7 @@ const init = (modules: { typescript: typeof TS }) => {
 			const sf = ls.getProgram()?.getSourceFile(fileName);
 			if (!sf) return prior;
 			syncResolved();
-			// Same codes as TypeScript's own diagnostics, so they read as ts(2339) in the editor.
-			const diag = (
-				start: number,
-				length: number,
-				messageText: string,
-				code: number,
-			): TS.Diagnostic => ({
-				file: sf,
-				start,
-				length,
-				messageText,
-				category: ts.DiagnosticCategory.Error,
-				code,
-				...(code === 90001 ? { source: 'n8n' } : {}),
-			});
-			const extra = itemsFor(fileName).flatMap((it) => {
-				// resolve() re-checks a literal declared elsewhere: report at the call.
-				if (it.reportAt) {
-					return it.analysis.blocks.flatMap((b) =>
-						b.errors.map((e) =>
-							diag(
-								it.reportAt!.start,
-								it.reportAt!.length,
-								`${e.message} (in '${it.expression}' against this data)`,
-								e.code,
-							),
-						),
-					);
-				}
-				const inBlocks = it.analysis.blocks.flatMap((b) =>
-					b.errors.map((e) =>
-						diag(it.textStart + e.start, Math.max(e.end - e.start, 1), e.message, e.code),
-					),
-				);
-				const slot = it.analysis.slotError
-					? [diag(it.node.getStart(), it.node.getWidth(), it.analysis.slotError, 2322)]
-					: [];
-				return [...inBlocks, ...slot];
-			});
-			return [...prior, ...extra];
+			return [...prior, ...diagnostics(ts, itemsFor(fileName))];
 		};
 
 		// Hovering the variable an expr() is assigned to: TypeScript's Expr<...> plus what it resolves to.
