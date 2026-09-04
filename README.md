@@ -1,73 +1,96 @@
 # n8n expression types
 
-n8n expressions are JavaScript inside strings: `={{ $json.user.email.toLowerCase() }}`.
-Today nothing checks them before they run. This repo types them with TypeScript's own
-checker, so the editor shows errors, hover types, completions and quick fixes.
+n8n expressions are JavaScript inside strings: `={{ $json.orderId }}`.
+Nothing checks them before they run. This repo hands them to TypeScript's own checker, so the
+editor shows types, n8n's method docs, completions and quick fixes inside the string, and
+`n8n-expressions check` fails the build on expressions that will not work.
 
 ```ts
-const total = expr('={{ $input.all().map((i) => i.json.n).sum() }}');
-//                       ^ hover: (method) Array<number>.sum(): number
+const orderId = expr("={{ $('Webhook').item.json.body.orderId }}");
+const when = expr('={{ $now.toISo() }}');
+//                          ^ Property 'toISo' does not exist on type 'DateTime'.
+//                            Did you mean 'toISO'?   (quick fix: Change spelling)
 
-resolve(total, sample); // number
-resolve(typo, sample);  // N8nResolveError (typescript error):
-//   Property 'toUppercase' does not exist on type 'string'. Did you mean 'toUpperCase'?
+resolve(orderId, sample); // number, from the sample's Webhook output
 ```
 
-## Demo
+## Run it
 
 ```sh
 pnpm install
-pnpm open # Launches VS Code window with the extension loaded
+pnpm open # Opens VSCode with the extension loaded
+```
+
+## Features
+
+**Editor.** Everything TypeScript gives you, forwarded into the string: hover on `{{` shows
+the block's result type, `.toTitleCase` shows n8n's docs and example, `$now.minus(` shows
+Luxon's signature, "Change spelling to 'toISO'" is a quick fix, identifiers get semantic
+colours. Works in any tsserver editor via tsconfig, or through the VS Code extension.
+
+**Typed globals.** `$json`, `$input`, `$('Node')`, `$binary`, `$vars`, `$now`,
+`$if`, and every n8n extension method carry their real types. Item data has no known shape
+until data arrives, so `$json.anything` passes; unknown globals, wrong contexts and typos on
+known types fail.
+
+```ts
+expr("={{ $('Webhook').params.httpMethod }}"); // hover .params, .item: n8n's node data shape
+expr('={{ $json.user.emails.first().isEmail() }}'); // n8n extensions
+expr('={{ $input.all().map((i) => i.json.n).sum() }}');
+//     ^ hover {{: (block) ...: number
+expr('={{ $pageCount }}'); // InvalidExpr: not a node-parameter global
+```
+
+**Real data makes it exact.** `resolve()` and `Resolve<>` check the expression against the
+data's type. The result type is specific to that pairing, and a field the data does not have
+is an error at the `resolve()` site.
+
+```ts
+resolve(orderId, sample); // number
+type Method = Resolve<typeof method, typeof sample>; // string
+type Ok = Resolve<typeof email, typeof sample>; // boolean
+
+const typo = expr('={{ $json.user.name.toUppercase() }}'); // fine here: $json is loose
+resolve(typo, sample);
+// Property 'toUppercase' does not exist on type 'string'. Did you mean 'toUpperCase'?
+// (in '={{ $json.user.name.toUppercase() }}' against this data)
+```
+
+The lookup behind `Resolve<>` is a hidden file, `.n8n/expressions.d.ts`, written by the plugin
+while you type and by `n8n-expressions check` before `tsc`. Plain `tsc`, no wrapper, nothing
+to commit.
+
+**Lambda form.** `expr()` also takes a lambda over the context. Same contexts and globals,
+checked by TypeScript itself with no plugin involved; serialised to `={{ body }}` with
+`fn.toString()`, so n8n sees an ordinary expression. `resolve()` returns the type the lambda
+yields but cannot re-check the body against data.
+
+```ts
+expr(({ $ }) => $('Webhook').item.json.body.orderId);       // LambdaExpr<NodeParameterContext, any>
+expr.httpPagination(({ $pageCount }) => $pageCount >= 10);  // LambdaExpr<HttpPaginationContext, boolean>
+expr(({ $now }) => $now.toISo());                           // error: Did you mean 'toISO'?
+expr(({ $pageCount }) => $pageCount);                       // error: not in this context
 ```
 
 
-## What you get
 
-**Branded slots, zero edits.** When a field is declared as an expression, every literal
-assigned to it is checked in that context. This is how existing node definitions get
-coverage without touching them.
+**Other contexts.** Pagination, routing, credential and description expressions each get
+their own globals; see [Contexts](#contexts).
+
+```ts
+expr.httpPagination('={{ $response.body.next }}');   // Expr<HttpPaginationContext, "...">
+expr.credential('={{ "Bearer " + $self.apiKey }}');
+```
+
+**Existing nodes, zero edits.** A field declared as `Expression<T, Context>` checks every
+literal assigned to it in that context. This is how node definitions get coverage without
+changing them.
 
 ```ts
 interface INodeTypeDescription { subtitle?: Expression<string, DescriptionContext> }
 const description: INodeTypeDescription = { subtitle: '={{ $parameter.operation }}' };
 ```
 
-**`expr()` where there is no slot.** Names the context, carries the text in its type.
-
-```ts
-const next = expr.httpPagination('={{ $response.body.next }}');   // Expr<HttpPaginationContext, "...">
-const bad  = expr('={{ $pageCount }}');                           // InvalidExpr<...>: not in this context
-```
-
-**`resolve()` and `Resolve<>` are where data enters.** The expression is checked against
-the data's type, and the result type is specific to that pairing. The lookup behind it is
-a hidden file, `.n8n/expressions.d.ts`, written by the plugin while you type and by
-`n8n-expressions check` before `tsc`. Plain `tsc`, no wrapper, nothing to commit.
-
-```ts
-const url: string = resolve(next, paginationSample);
-type Url = Resolve<typeof next, typeof paginationSample>;        // string
-type Bad = Resolve<typeof next, { response: { items: number[] } }>; // N8nResolveError
-```
-
-**Lambda form.** `expr()` also takes a lambda over the context. Same contexts and slots,
-checked by TypeScript itself with runtime data loose; serialised to `={{ body }}` with
-`fn.toString()`, so n8n sees an ordinary expression. `resolve()` returns the type the lambda
-yields but cannot re-check the body against data: a body is checked once, where it is written.
-
-```ts
-expr(({ $json, $ }) => $json.n * $('Webhook').item.json.body.orderId);  // LambdaExpr<NodeParameterContext, number>
-expr.httpPagination(({ $pageCount }) => $pageCount >= 10);              // LambdaExpr<HttpPaginationContext, boolean>
-expr(({ $pageCount }) => $pageCount);                                   // error: not in this context
-```
-
-Serialisation reads compiled output, so it needs `target` >= ES2020 (no `?.` downlevelling)
-and no minifier; a closure over a local compiles and breaks at runtime.
-
-**Editor.** Everything TypeScript gives you, forwarded into the string: hover on `$json`
-shows its type, `.toTitleCase` shows n8n's docs and example, `$now.minus(` shows Luxon's
-signature, "Change spelling to 'toUpperCase'" is a quick fix, identifiers get semantic
-colours. Works in any tsserver editor via tsconfig, or through the VS Code extension.
 
 ## How it works
 
@@ -121,8 +144,7 @@ n8n-expressions check && tsc
 ```
 
 `check` reports broken expressions in tsc's format, at the string's position, and writes the
-lookup that makes `tsc` exact. Without
-it `tsc` still passes; resolved types are `any`.
+lookup that makes `tsc` exact. Without it `tsc` still passes; resolved types are `any`.
 
 ## Repo
 
