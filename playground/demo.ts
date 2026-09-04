@@ -65,6 +65,7 @@ export const card = expr('={{ `${$json.user.name} <${$json.user.emails[0]}>` }}'
 export const safe = expr('={{ $json.user?.emails?.[0] ?? "none" }}');
 export const mime = expr('={{ $binary.data.mimeType }}');
 export const key = expr('={{ $vars.apiKey }}');
+export const price = expr('={{ "$" + $json.n }}'); // a "$" in text is not the $ function
 export const language = () => [
 	resolve(title, sample),
 	resolve(email, sample),

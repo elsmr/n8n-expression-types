@@ -1,5 +1,5 @@
-/// <reference path="./shapes.d.ts" preserve="true" />
-/// <reference path="./extensions.d.ts" preserve="true" />
+/// <reference path="./shapes.ts" preserve="true" />
+/// <reference path="./extensions.ts" preserve="true" />
 export {
 	expr,
 	resolve,
@@ -14,7 +14,6 @@ export {
 	type ContextOf,
 } from './expr.ts';
 export {
-	defineContext,
 	contextNames,
 	isContextName,
 	emptyShape,

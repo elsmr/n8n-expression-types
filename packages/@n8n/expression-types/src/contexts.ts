@@ -195,8 +195,8 @@ export interface CredentialContext<R = {}> extends CommonContext<R> {
 
 // ---------- registry ----------
 //
-// Type side: the global map below, open for merging. Runtime side: defineContext(name), so
-// expr.<name>() and expression.<name>() exist. Adding a context is one file doing both.
+// Type side: the global map below, open for merging. Runtime side: the names list, so
+// expr.<name>() exists.
 
 declare global {
 	interface N8nExpressionContexts<R> {
@@ -220,24 +220,15 @@ export type ContextName<C> = {
 		: never;
 }[ExpressionContext];
 
-const names = new Set<ExpressionContext>();
-export const defineContext = <N extends ExpressionContext>(name: N): N => {
-	names.add(name);
-	return name;
-};
-export const contextNames = (): ExpressionContext[] => [...names];
-export const isContextName = (s: string | undefined): s is ExpressionContext =>
-	names.has(s as ExpressionContext);
-
-for (const n of [
+export const contextNames: readonly ExpressionContext[] = [
 	'nodeParameter',
 	'httpPagination',
 	'routing',
 	'description',
 	'credential',
-] as const) {
-	defineContext(n);
-}
+];
+export const isContextName = (s: string | undefined): s is ExpressionContext =>
+	(contextNames as readonly (string | undefined)[]).includes(s);
 
 // ---------- shape as type text ----------
 

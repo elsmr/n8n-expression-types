@@ -1,4 +1,4 @@
-/// <reference path="./shapes.d.ts" preserve="true" />
+/// <reference path="./shapes.ts" preserve="true" />
 // expr() takes an n8n expression as a string or as a lambda over the context.
 //
 //   expr('={{ $now.toISO() }}')                   Expr<NodeParameterContext, "={{ $now.toISO() }}">
@@ -121,7 +121,7 @@ type ExprByContext = { readonly [N in ExpressionContext]: ExprFn<ContextByName<N
 
 export const expr: ExprFn<NodeParameterContext> & ExprByContext = Object.assign(
 	make<NodeParameterContext>(),
-	Object.fromEntries(contextNames().map((n) => [n, make()])) as ExprByContext,
+	Object.fromEntries(contextNames.map((n) => [n, make()])) as ExprByContext,
 );
 
 type AnyExpr = Expression<any, any>;

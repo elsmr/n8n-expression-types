@@ -1,4 +1,4 @@
-// Finds marked n8n expressions in a source file. Two markers, no fallback:
+// Finds marked n8n expressions in a source file. Markers only, no fallback:
 //   - a branded slot: the literal's contextual type is Expression<T, C>
 //   - a call: expr('...'), expr.<context>('...'), or resolve(expressionVar, data)
 //   - a type: Resolve<typeof expressionVar, typeof data>, checked without evaluating
@@ -8,29 +8,38 @@ import type TS from 'typescript';
 import {
 	emptyShape,
 	isContextName,
+	resolvedKey,
 	type ExpressionContext,
 	type RuntimeShape,
 } from '@n8n/expression-types';
 import { shapeFromType } from './shape-from-type.ts';
 import { enclosingParameters, enclosingValue } from './static-shape.ts';
-import type { Analysis, ExpressionService } from './service.ts';
-import { resolvedKey } from '@n8n/expression-types';
+import { SANDBOX_CODE, type Analysis, type ExpressionService } from './service.ts';
 
-export type Found = {
-	kind: 'slot' | 'call' | 'resolve';
+type Common = { expression: string; context: ExpressionContext; shape: RuntimeShape };
+type Literal = Common & {
 	node: TS.StringLiteralLike;
-	expression: string;
 	/** Offset of the first character of the expression text in the file. */
 	textStart: number;
-	context: ExpressionContext;
-	shape: RuntimeShape;
-	/** Slot's declared value type, as text, when it is safe to check against. */
-	expected?: string;
-	/** Where to report for resolve() calls whose literal lives elsewhere. */
-	reportAt?: { start: number; length: number };
-	/** The data type at a resolve() site, as text, when it only uses portable names. */
-	dataText?: string;
 };
+export type Found =
+	| (Literal & { kind: 'call' })
+	| (Literal & {
+			kind: 'slot';
+			/** Slot's declared value type, as text, when it is safe to check against. */
+			expected?: string;
+	  })
+	| (Common & {
+			kind: 'resolve';
+			/** The resolve()/Resolve<> site, where errors are reported. */
+			node: TS.Node;
+			/** The data type, as text, when it only uses portable names. */
+			dataText?: string;
+	  });
+
+/** Items whose text sits in this file: everything the editor can point into. */
+export const isLiteral = <F extends Found>(f: F): f is Extract<F, { textStart: number }> =>
+	f.kind !== 'resolve';
 
 // Type text that only uses names every project resolves: primitives, literals, unions,
 // arrays, objects, and a few built-in generics. Anything else is not portable.
@@ -43,7 +52,7 @@ const portable = (text: string): string | undefined => {
 	return names.every((n) => PORTABLE_NAMES.has(n)) ? text : undefined;
 };
 
-/** Expression<T, C> brand on a type or one of its union members. */
+/** Expression<T, C> brand on a type or one of its union members; `text` when it is an expr() literal. */
 const brandOf = (ts: typeof TS, checker: TS.TypeChecker, type: TS.Type | undefined) => {
 	if (!type) return undefined;
 	for (const t of type.isUnion() ? type.types : [type]) {
@@ -52,10 +61,13 @@ const brandOf = (ts: typeof TS, checker: TS.TypeChecker, type: TS.Type | undefin
 		const bt = checker.getNonNullableType(checker.getTypeOfSymbol(brand));
 		const nameSym = checker.getPropertyOfType(bt, 'name');
 		const val = checker.getPropertyOfType(bt, 'type');
+		const textSym = checker.getPropertyOfType(bt, 'text');
 		const nameType = nameSym && checker.getTypeOfSymbol(nameSym);
+		const textType = textSym && checker.getTypeOfSymbol(textSym);
 		if (!nameType?.isStringLiteral() || !isContextName(nameType.value) || !val) continue;
 		return {
 			context: nameType.value,
+			text: textType?.isStringLiteral() ? textType.value : undefined,
 			expected: checker.typeToString(
 				checker.getTypeOfSymbol(val),
 				undefined,
@@ -84,50 +96,30 @@ const exprCallContext = (ts: typeof TS, callee: TS.Expression): ExpressionContex
 	return undefined;
 };
 
-/** The literal behind an identifier declared as `const x = expr.<ctx>('...')`. */
-const literalBehind = (ts: typeof TS, checker: TS.TypeChecker, arg: TS.Expression) => {
-	if (ts.isStringLiteralLike(arg)) return { literal: arg, context: undefined };
-	if (!ts.isIdentifier(arg)) return undefined;
-	const symbol = checker.getSymbolAtLocation(arg);
-	// Imported names are aliases; follow them to the declaring const.
-	const target =
-		symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
-	const decl = target?.valueDeclaration;
-	if (
-		!decl ||
-		!ts.isVariableDeclaration(decl) ||
-		!decl.initializer ||
-		!ts.isCallExpression(decl.initializer)
-	)
-		return undefined;
-	const init = decl.initializer;
-	const first = init.arguments[0];
-	if (!first || !ts.isStringLiteralLike(first)) return undefined;
-	return { literal: first, context: exprCallContext(ts, init.expression) };
-};
-
 export const findExpressions = (
 	ts: typeof TS,
 	sf: TS.SourceFile,
 	checker: TS.TypeChecker,
 ): Found[] => {
 	const found: Found[] = [];
-	const push = (f: Omit<Found, 'expression' | 'textStart'>) =>
-		found.push({ ...f, expression: f.node.text, textStart: f.node.getStart(sf) + 1 });
+	const literal = (node: TS.StringLiteralLike) => ({
+		node,
+		expression: node.text,
+		textStart: node.getStart(sf) + 1,
+	});
 
-	const pushResolve = (
-		behind: { literal: TS.StringLiteralLike; context: ExpressionContext | undefined },
-		dataType: TS.Type,
-		site: TS.Node,
-	) => {
-		const context = behind.context ?? 'nodeParameter';
-		const shape = shapeFromType(ts, checker, dataType, context);
-		push({
+	// The text and context come from the Expr type of the argument, so the declaration can
+	// live anywhere; the site itself is where errors are reported.
+	const pushResolve = (exprType: TS.Type, dataType: TS.Type, site: TS.Node) => {
+		const brand = brandOf(ts, checker, exprType);
+		if (brand?.text === undefined) return;
+		const shape = shapeFromType(ts, checker, dataType, brand.context);
+		found.push({
 			kind: 'resolve',
-			node: behind.literal,
+			node: site,
+			expression: brand.text,
 			context: shape.context,
 			shape,
-			reportAt: { start: site.getStart(sf), length: site.getWidth(sf) },
 			dataText: portable(
 				checker.typeToString(dataType, undefined, ts.TypeFormatFlags.NoTruncation),
 			),
@@ -140,15 +132,17 @@ export const findExpressions = (
 			const [first, second] = node.arguments;
 			const ctx = first && exprCallContext(ts, callee);
 			if (ctx && ts.isStringLiteralLike(first)) {
-				push({ kind: 'call', node: first, context: ctx, shape: staticShape(ts, first, ctx) });
+				found.push({
+					kind: 'call',
+					...literal(first),
+					context: ctx,
+					shape: staticShape(ts, first, ctx),
+				});
 				ts.forEachChild(node, visit);
 				return;
 			}
 			if (ts.isIdentifier(callee) && callee.text === 'resolve' && first && second) {
-				const behind = literalBehind(ts, checker, first);
-				if (behind) {
-					pushResolve(behind, checker.getTypeAtLocation(second), node);
-				}
+				pushResolve(checker.getTypeAtLocation(first), checker.getTypeAtLocation(second), node);
 			}
 		} else if (
 			ts.isTypeReferenceNode(node) &&
@@ -156,16 +150,19 @@ export const findExpressions = (
 			node.typeName.text === 'Resolve'
 		) {
 			const [exprArg, dataArg] = node.typeArguments ?? [];
-			if (exprArg && dataArg && ts.isTypeQueryNode(exprArg) && ts.isIdentifier(exprArg.exprName)) {
-				const behind = literalBehind(ts, checker, exprArg.exprName);
-				if (behind) pushResolve(behind, checker.getTypeFromTypeNode(dataArg), node);
+			if (exprArg && dataArg) {
+				pushResolve(
+					checker.getTypeFromTypeNode(exprArg),
+					checker.getTypeFromTypeNode(dataArg),
+					node,
+				);
 			}
 		} else if (ts.isStringLiteralLike(node) && node.text.startsWith('=')) {
 			const brand = brandOf(ts, checker, checker.getContextualType(node as TS.Expression));
 			if (brand) {
-				push({
+				found.push({
 					kind: 'slot',
-					node,
+					...literal(node),
 					context: brand.context,
 					shape: staticShape(ts, node, brand.context),
 					expected: portable(brand.expected),
@@ -250,7 +247,7 @@ export const lookupEntries = (
 
 /**
  * TypeScript diagnostics for analysed items, shared by the plugin and the CLI. Same codes as
- * TypeScript's own, so they read as ts(2339) in the editor; sandbox rules are 90001.
+ * TypeScript's own, so they read as ts(2339) in the editor; sandbox rules carry SANDBOX_CODE.
  */
 export const diagnostics = (
 	ts: typeof TS,
@@ -270,14 +267,18 @@ export const diagnostics = (
 			messageText,
 			category: ts.DiagnosticCategory.Error,
 			code,
-			...(code === 90001 ? { source: 'n8n' } : {}),
+			...(code === SANDBOX_CODE ? { source: 'n8n' } : {}),
 		});
 		const errors = it.analysis.blocks.flatMap((b) => b.errors);
 		// resolve() re-checks a literal declared elsewhere: report at the call.
-		if (it.reportAt) {
-			const { start, length } = it.reportAt;
+		if (it.kind === 'resolve') {
 			return errors.map((e) =>
-				diag(start, length, `${e.message} (in '${it.expression}' against this data)`, e.code),
+				diag(
+					it.node.getStart(),
+					it.node.getWidth(),
+					`${e.message} (in '${it.expression}' against this data)`,
+					e.code,
+				),
 			);
 		}
 		const inBlocks = errors.map((e) =>
@@ -303,11 +304,14 @@ export const collectResolved = (
 	files = projectFiles(program),
 ) => {
 	const checker = program.getTypeChecker();
-	const items = files.flatMap((sf) =>
-		findExpressions(ts, sf, checker).map((f) => ({
-			...f,
-			analysis: service.analyze(f.expression, f.shape, f.expected),
-		})),
-	);
+	const items = files.flatMap((sf) => findExpressions(ts, sf, checker).map(analysed(service)));
 	return { entries: lookupEntries(items), diagnostics: diagnostics(ts, items) };
 };
+
+/** Pairs a found expression with its analysis; only slots have an expected type. */
+export const analysed =
+	(service: ExpressionService) =>
+	<F extends Found>(f: F): F & { analysis: Analysis } => ({
+		...f,
+		analysis: service.analyze(f.expression, f.shape, f.kind === 'slot' ? f.expected : undefined),
+	});

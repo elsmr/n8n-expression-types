@@ -1,4 +1,4 @@
-// Writes packages/@n8n/expression-types/src/extensions.d.ts: n8n's expression extension methods as global
+// Writes packages/@n8n/expression-types/src/extensions.ts: n8n's expression extension methods as global
 // interface augmentations, read from n8n-workflow's doc metadata. Re-run after bumping
 // n8n-workflow, and check workflow-data-proxy.ts for new globals to add to contexts.ts.
 // Lives outside core so core carries no n8n dependency.
@@ -182,25 +182,22 @@ ${helperNames.map((n) => `\t\t${n}: typeof ${n};`).join('\n')}
 export {};
 `;
 
-const outPath = new URL('../packages/@n8n/expression-types/src/extensions.d.ts', import.meta.url);
+const outPath = new URL('../packages/@n8n/expression-types/src/extensions.ts', import.meta.url);
 writeFileSync(outPath, out);
-console.log('wrote extensions.d.ts');
+console.log('wrote extensions.ts');
 
 // skipLibCheck hides duplicate-identifier clashes with lib or @types/luxon; check them here.
 const dir = path.dirname(fileURLToPath(outPath));
-const program = ts.createProgram(
-	[path.join(dir, 'extensions.d.ts'), path.join(dir, 'shapes.d.ts')],
-	{
-		strict: true,
-		target: ts.ScriptTarget.ESNext,
-		lib: ['lib.es2023.d.ts'],
-		module: ts.ModuleKind.ESNext,
-		moduleResolution: ts.ModuleResolutionKind.Bundler,
-		types: [],
-		noEmit: true,
-		skipLibCheck: false,
-	},
-);
+const program = ts.createProgram([path.join(dir, 'extensions.ts'), path.join(dir, 'shapes.ts')], {
+	strict: true,
+	target: ts.ScriptTarget.ESNext,
+	lib: ['lib.es2023.d.ts'],
+	module: ts.ModuleKind.ESNext,
+	moduleResolution: ts.ModuleResolutionKind.Bundler,
+	types: [],
+	noEmit: true,
+	skipLibCheck: false,
+});
 const clashes = ts.getPreEmitDiagnostics(program).filter((d) => d.code === 2300);
 for (const d of clashes) {
 	const { line } = d.file!.getLineAndCharacterOfPosition(d.start!);

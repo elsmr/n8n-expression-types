@@ -5,8 +5,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-export const LOOKUP_GLOB = '.n8n/*.d.ts';
-
 export const lookupFile = (projectDir: string) => path.join(projectDir, '.n8n/expressions.d.ts');
 
 export const readLookup = (projectDir: string) => {

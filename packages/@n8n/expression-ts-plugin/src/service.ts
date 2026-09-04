@@ -17,7 +17,7 @@ import {
 
 export type Options = {
 	ts: typeof TS;
-	/** The @n8n/expression-types package directory: src/*.d.ts, dist/, luxon. */
+	/** The @n8n/expression-types package directory: dist/*.d.ts, luxon. */
 	root: string;
 };
 
@@ -30,26 +30,44 @@ export type BlockAnalysis = {
 	errors: Array<{ message: string; start: number; end: number; code: number }>;
 };
 
+/** Diagnostic code for n8n's sandbox rules; TypeScript's own codes are all below this. */
+export const SANDBOX_CODE = 90001;
+
 /** n8n's own rules, enforced by the sandbox rather than by types (expression-sandboxing.ts, expression.ts). */
-export const SANDBOX_RULES: Array<{ pattern: RegExp; message: string }> = [
-	{
-		pattern: /\.\s*constructor\b/g,
-		message:
-			"Expression contains invalid constructor function call. n8n rejects any '.constructor' access.",
-	},
-	{
-		pattern: /\b__proto__\b|\.\s*prototype\b/g,
-		message: 'n8n blocks prototype access in expressions.',
-	},
-	{
-		pattern: /\$(?![\w$]|\s*\(|\{)/g,
-		message: 'Cannot access "$" without calling it as a function.',
-	},
-	{
-		pattern: /\bclass\b[^{]*\bextends\b/g,
-		message: 'Cannot use dynamic class extension due to security concerns.',
-	},
-];
+const sandboxViolations = (ts: typeof TS, root: TS.Node) => {
+	const out: Array<{ node: TS.Node; message: string }> = [];
+	const visit = (n: TS.Node) => {
+		const member = ts.isPropertyAccessExpression(n)
+			? n.name.text
+			: ts.isElementAccessExpression(n) && ts.isStringLiteralLike(n.argumentExpression)
+				? n.argumentExpression.text
+				: undefined;
+		if (member === 'constructor') {
+			out.push({
+				node: n,
+				message:
+					"Expression contains invalid constructor function call. n8n rejects any '.constructor' access.",
+			});
+		} else if (member === 'prototype' || member === '__proto__') {
+			out.push({ node: n, message: 'n8n blocks prototype access in expressions.' });
+		} else if (
+			ts.isIdentifier(n) &&
+			n.text === '$' &&
+			!(ts.isCallExpression(n.parent) && n.parent.expression === n) &&
+			!(ts.isPropertyAccessExpression(n.parent) && n.parent.name === n)
+		) {
+			out.push({ node: n, message: 'Cannot access "$" without calling it as a function.' });
+		} else if (ts.isClassLike(n) && n.heritageClauses?.length) {
+			out.push({
+				node: n,
+				message: 'Cannot use dynamic class extension due to security concerns.',
+			});
+		}
+		ts.forEachChild(n, visit);
+	};
+	visit(root);
+	return out;
+};
 
 export type Analysis = {
 	type: string;
@@ -64,7 +82,7 @@ const BLOCK = /\{\{([\s\S]*?)\}\}/g;
 
 // Mirrors @n8n/tournament ExpressionBuilder: one text-less block returns its value,
 // anything else concatenates to a string.
-export const compile = (expression: string) => {
+const compile = (expression: string) => {
 	if (!expression.startsWith('=')) return { blocks: [] as Block[], source: '', hasText: true };
 	const body = expression.slice(1);
 	const blocks: Block[] = [];
@@ -84,11 +102,7 @@ export const compile = (expression: string) => {
 export const createExpressionService = ({ ts, root }: Options) => {
 	const GLOBALS_FILE = `${root}/__expr__/globals.d.ts`;
 	const EXPR_FILE = `${root}/__expr__/expr.ts`;
-	const LIB_FILES = [
-		`${root}/src/shapes.d.ts`,
-		`${root}/src/extensions.d.ts`,
-		`${root}/dist/contexts.d.ts`,
-	];
+	const LIB_FILES = ['shapes', 'extensions', 'contexts'].map((f) => `${root}/dist/${f}.d.ts`);
 
 	const files = new Map<string, string>();
 	const versions = new Map<string, number>();
@@ -173,7 +187,22 @@ export const createExpressionService = ({ ts, root }: Options) => {
 		return compiled;
 	};
 
+	// Pure in its inputs, and each run builds a fresh inner program: memoised by content.
+	// Every keystroke inside an expression is a new key, so the memo is dropped once it is
+	// far larger than any project's live set of expressions.
+	const MEMO_LIMIT = 10_000;
+	const analyses = new Map<string, Analysis>();
 	const analyze = (expression: string, shape: RuntimeShape, expected?: string): Analysis => {
+		const key = JSON.stringify([shape.context, renderShape(shape), expected, expression]);
+		const hit = analyses.get(key);
+		if (hit) return hit;
+		if (analyses.size >= MEMO_LIMIT) analyses.clear();
+		const result = check(expression, shape, expected);
+		analyses.set(key, result);
+		return result;
+	};
+
+	const check = (expression: string, shape: RuntimeShape, expected?: string): Analysis => {
 		const { blocks, hasText } = load(expression, shape, expected);
 		if (blocks.length === 0) return { type: JSON.stringify(expression), blocks: [] };
 
@@ -229,17 +258,13 @@ export const createExpressionService = ({ ts, root }: Options) => {
 					end: toExpr(d.start! + (d.length ?? 1)),
 					code: d.code,
 				}));
-			for (const rule of SANDBOX_RULES) {
-				for (const m of b.body.matchAll(rule.pattern)) {
-					errors.push({
-						message: rule.message,
-						start: b.start + m.index,
-						end: b.start + m.index + m[0].length,
-						code: 90001,
-					});
-				}
-			}
-			return { body: b.body, start: b.start, end: b.end, type, errors };
+			const sandbox = sandboxViolations(ts, stmt).map(({ node, message }) => ({
+				message,
+				start: toExpr(node.getStart(sf)),
+				end: toExpr(node.getEnd()),
+				code: SANDBOX_CODE,
+			}));
+			return { body: b.body, start: b.start, end: b.end, type, errors: [...errors, ...sandbox] };
 		});
 		const type = !hasText && typed.length === 1 ? typed[0].type : 'string';
 		const checkStmt = expected ? declaration('__expected') : undefined;

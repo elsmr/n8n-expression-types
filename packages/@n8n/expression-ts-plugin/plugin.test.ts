@@ -23,10 +23,15 @@ const parsed = ts.getParsedCommandLineOfConfigFile(
 	},
 )!;
 const files = new Map(parsed.fileNames.map((f) => [f, ts.sys.readFile(f) ?? ''] as const));
+const versions = new Map<string, number>();
+const edit = (fileName: string, from: string, to: string) => {
+	files.set(fileName, files.get(fileName)!.replace(from, to));
+	versions.set(fileName, (versions.get(fileName) ?? 1) + 1);
+};
 const host: ts.LanguageServiceHost = {
 	getCompilationSettings: () => ({ ...parsed.options, plugins: undefined }),
 	getScriptFileNames: () => [...files.keys()],
-	getScriptVersion: () => '1',
+	getScriptVersion: (f) => String(versions.get(f) ?? 1),
 	getScriptSnapshot: (f) => {
 		const t = files.get(f) ?? ts.sys.readFile(f);
 		return t === undefined ? undefined : ts.ScriptSnapshot.fromString(t);
@@ -86,6 +91,7 @@ const check = (label: string, fn: () => void) => {
 
 const demo = open('demo.ts');
 const desc = open('node-description.ts');
+const tests = open('types.test.ts');
 
 check('unknown global for the context is a diagnostic', () =>
 	assert.ok(demo.added().some((m) => m.startsWith("Cannot find name '$pageCount'"))),
@@ -96,6 +102,15 @@ check('n8n sandbox rules are diagnostics', () =>
 			demo.added().some((m) => m.includes('"$"')),
 	),
 );
+check('sandbox rules ignore string literals', () => {
+	const start = demo.at('"$" + $json.n');
+	const inside = ls
+		.getSemanticDiagnostics(demo.fileName)
+		.filter(
+			(d) => d.code === 90001 && d.start! >= start && d.start! < start + '"$" + $json.n'.length,
+		);
+	assert.deepEqual(inside, []);
+});
 check('resolve() sites report against their data', () =>
 	assert.ok(
 		demo
@@ -105,6 +120,25 @@ check('resolve() sites report against their data', () =>
 			),
 	),
 );
+check('resolve() of an expression imported from another file reports in this file', () => {
+	const d = ls
+		.getSemanticDiagnostics(tests.fileName)
+		.find((d) => String(d.messageText).includes("'toUppercase'"));
+	assert.ok(d);
+	assert.equal(d.file?.fileName, tests.fileName);
+	assert.equal(d.start, tests.at('resolve(typo, sample)'));
+});
+check('editing the declaration in another file refreshes the resolve() site', () => {
+	const has = () =>
+		ls
+			.getSemanticDiagnostics(tests.fileName)
+			.some((d) => String(d.messageText).includes("'toUppercase'"));
+	assert.ok(has());
+	edit(demo.fileName, '$json.test.toUppercase()', '$json.test.toUpperCase()');
+	assert.ok(!has());
+	edit(demo.fileName, '$json.test.toUpperCase()', '$json.test.toUppercase()');
+	assert.ok(has());
+});
 check('slot type mismatch is a diagnostic', () =>
 	assert.ok(desc.added().some((m) => m.includes('slot expects number'))),
 );
@@ -134,12 +168,6 @@ check('hover an n8n extension shows its docs', () =>
 );
 check('hover {{ shows the block result type', () =>
 	assert.match(demo.hover(demo.at('{{ $pageCount >= 10')).display, /^\(block\) .*: boolean$/),
-);
-check('hover the expr variable summarises resolution', () =>
-	assert.match(
-		demo.hover(demo.at('const orderId', 'const '.length + 2)).doc,
-		/Resolves to `number`/,
-	),
 );
 check('hover $value in a routing slot', () =>
 	assert.equal(desc.hover(desc.at('$value.trim', 2)).display, 'const $value: string'),

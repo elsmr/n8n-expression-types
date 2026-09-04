@@ -11,4 +11,3 @@ ignoredBuiltDependencies:
 allowBuilds:
   '@biomejs/biome': true
   esbuild: true
-  isolated-vm: true

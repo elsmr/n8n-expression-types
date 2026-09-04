@@ -78,9 +78,12 @@ export const propertyType = (ts: typeof TS, prop: TS.ObjectLiteralExpression): s
 			return options ? `Partial<${propertiesType(ts, options)}>` : 'Record<string, any>';
 		case 'fixedCollection': {
 			if (!options) return 'Record<string, any>';
+			const typeOptions = assignment(ts, prop, 'typeOptions')?.initializer;
 			const multiple =
-				assignment(ts, prop, 'typeOptions')?.initializer.getText().includes('multipleValues') ??
-				false;
+				typeOptions !== undefined &&
+				ts.isObjectLiteralExpression(typeOptions) &&
+				assignment(ts, typeOptions, 'multipleValues')?.initializer.kind ===
+					ts.SyntaxKind.TrueKeyword;
 			const groups = options.elements.flatMap((e) => {
 				if (!ts.isObjectLiteralExpression(e)) return [];
 				const name = stringProp(ts, e, 'name');

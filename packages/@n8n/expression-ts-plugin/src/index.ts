@@ -12,8 +12,10 @@ import { createRequire } from 'node:module';
 import type TS from 'typescript';
 import { createExpressionService, type Analysis } from './service.ts';
 import {
+	analysed,
 	diagnostics,
 	findExpressions,
+	isLiteral,
 	lookupEntries,
 	projectFiles,
 	renderResolved,
@@ -22,6 +24,7 @@ import {
 import { lookupFile as lookupFileFor, readLookup, writeLookup } from './lookup-file.ts';
 
 type Item = Found & { analysis: Analysis };
+type LiteralItem = Extract<Item, { textStart: number }>;
 
 // A project lists the plugin in tsconfig and the VS Code extension injects it too:
 // the second create() for the same project must not decorate twice.
@@ -41,24 +44,24 @@ const init = (modules: { typescript: typeof TS }) => {
 		const projectDir = info.project.getCurrentDirectory();
 		const service = createExpressionService({ ts, root });
 
-		// Cached per file, keyed on the versions of every file its items read a literal from:
-		// a resolve() site in B analyses the text declared in A, so editing A must refresh B.
+		// Scan results cached per file; the analyses behind them are memoised by content in the
+		// service. Literals depend on their own file only. A resolve() site reads the expression
+		// and data types from anywhere, so those files rescan whenever the program changed.
 		const version = (fileName: string) => info.languageServiceHost.getScriptVersion(fileName);
-		const cache = new Map<string, { versions: Map<string, string>; items: Item[] }>();
+		const cache = new Map<string, { program: TS.Program; version: string; items: Item[] }>();
 		const itemsFor = (fileName: string): Item[] => {
-			const hit = cache.get(fileName);
-			if (hit && [...hit.versions].every(([f, v]) => version(f) === v)) return hit.items;
 			const program = ls.getProgram();
-			const sf = program?.getSourceFile(fileName);
-			if (!program || !sf) return [];
-			const found = findExpressions(ts, sf, program.getTypeChecker());
-			const items: Item[] = found.map((f) => ({
-				...f,
-				analysis: service.analyze(f.expression, f.shape, f.expected),
-			}));
-			const deps = [fileName, ...items.map((it) => it.node.getSourceFile().fileName)];
-			const versions = new Map(deps.map((f): [string, string] => [f, version(f)]));
-			cache.set(fileName, { versions, items });
+			if (!program) return [];
+			const hit = cache.get(fileName);
+			const ownOnly = hit && !hit.items.some((it) => it.kind === 'resolve');
+			if (hit && (hit.program === program || (ownOnly && hit.version === version(fileName))))
+				return hit.items;
+			const sf = program.getSourceFile(fileName);
+			if (!sf) return [];
+			const items: Item[] = findExpressions(ts, sf, program.getTypeChecker()).map(
+				analysed(service),
+			);
+			cache.set(fileName, { program, version: version(fileName), items });
 			return items;
 		};
 		/** Every expression in the project. The first call scans everything; later calls hit the cache. */
@@ -67,12 +70,9 @@ const init = (modules: { typescript: typeof TS }) => {
 			return program ? projectFiles(program).flatMap((sf) => itemsFor(sf.fileName)) : [];
 		};
 		const itemAt = (fileName: string, position: number) =>
-			itemsFor(fileName).find(
-				(it) =>
-					it.kind !== 'resolve' &&
-					position >= it.textStart &&
-					position <= it.textStart + it.expression.length,
-			);
+			itemsFor(fileName)
+				.filter(isLiteral)
+				.find((it) => position >= it.textStart && position <= it.textStart + it.expression.length);
 
 		const lookupFile = lookupFileFor(projectDir);
 		let lookupText = readLookup(projectDir) ?? '';
@@ -117,33 +117,11 @@ const init = (modules: { typescript: typeof TS }) => {
 			return [...prior, ...diagnostics(ts, itemsFor(fileName))];
 		};
 
-		// Hovering the variable an expr() is assigned to: TypeScript's Expr<...> plus what it resolves to.
-		const withResolveSummary = (fileName: string, position: number): TS.QuickInfo | undefined => {
-			const prior = ls.getQuickInfoAtPosition(fileName, position);
-			const shown = prior?.displayParts?.map((p) => p.text).join('') ?? '';
-			const m = /\b(?:Expr|InvalidExpr)<\w+Context(?:<\{\}>)?, "((?:[^"\\]|\\.)*)">/.exec(shown);
-			if (!prior || !m) return prior;
-			const text = JSON.parse(`"${m[1]}"`) as string;
-			const all = projectItems();
-			const sites = all.filter((i) => i.kind === 'resolve' && i.expression === text);
-			const loose = all.find((i) => i.kind === 'call' && i.expression === text);
-			const types = [...new Set(sites.map((s) => s.analysis.type))];
-			const summary = sites.length
-				? `Resolves to \`${types.join(' | ')}\` against ${sites.length} data set${sites.length === 1 ? '' : 's'}.`
-				: loose && loose.analysis.type !== 'any'
-					? `Evaluates to \`${loose.analysis.type}\`. Not resolved against data.`
-					: 'Not resolved against data; the type depends on runtime input.';
-			return {
-				...prior,
-				documentation: [...(prior.documentation ?? []), { text: summary, kind: 'text' }],
-			};
-		};
-
 		// Inside a block: TypeScript's own quick info for the token. On the {{ }} delimiters:
 		// the block's result type. On surrounding text: the expression's type.
 		proxy.getQuickInfoAtPosition = (fileName, position) => {
 			const it = itemAt(fileName, position);
-			if (!it) return withResolveSummary(fileName, position);
+			if (!it) return ls.getQuickInfoAtPosition(fileName, position);
 			const offset = position - it.textStart;
 			const v = service.virtual(it.expression, it.shape);
 			// Styled like TypeScript's own "(kind) name: type" hovers.
@@ -177,22 +155,18 @@ const init = (modules: { typescript: typeof TS }) => {
 				const span = inner && v.toExpression(inner.textSpan);
 				if (inner && span)
 					return { ...inner, textSpan: { start: it.textStart + span.start, length: span.length } };
-				const a = analysed(block);
-				return info('block', `{{ ${block.body.trim()} }}`, a?.type ?? 'unknown', {
-					start: it.textStart + block.start - 2,
-					length: block.body.length + 4,
-				});
 			}
-			// On the delimiters themselves: the block's result type.
-			const delimited = v.blocks.find(
-				(b) =>
-					(offset >= b.start - 2 && offset < b.start) || (offset > b.end && offset <= b.end + 2),
-			);
-			if (delimited) {
-				const a = analysed(delimited);
-				return info('block', `{{ ${delimited.body.trim()} }}`, a?.type ?? 'unknown', {
-					start: it.textStart + delimited.start - 2,
-					length: delimited.body.length + 4,
+			// Nothing under the cursor inside a block, or on the {{ }} delimiters: the block's result type.
+			const around =
+				block ??
+				v.blocks.find(
+					(b) =>
+						(offset >= b.start - 2 && offset < b.start) || (offset > b.end && offset <= b.end + 2),
+				);
+			if (around) {
+				return info('block', `{{ ${around.body.trim()} }}`, analysed(around)?.type ?? 'unknown', {
+					start: it.textStart + around.start - 2,
+					length: around.body.length + 4,
 				});
 			}
 			return info('expression', it.context, it.analysis.type, {
@@ -205,24 +179,23 @@ const init = (modules: { typescript: typeof TS }) => {
 		const forward = <R>(
 			fileName: string,
 			position: number,
-			inner: (v: ReturnType<typeof service.virtual>, pos: number) => R,
+			inner: (v: ReturnType<typeof service.virtual>, pos: number, it: LiteralItem) => R,
 			fallback: () => R,
 		): R => {
 			const it = itemAt(fileName, position);
 			if (!it) return fallback();
 			const v = service.virtual(it.expression, it.shape);
 			const pos = v.toFile(position - it.textStart);
-			return pos === undefined ? fallback() : inner(v, pos);
+			return pos === undefined ? fallback() : inner(v, pos, it);
 		};
 
 		proxy.getSignatureHelpItems = (fileName, position, options) =>
 			forward(
 				fileName,
 				position,
-				(v, pos) => {
+				(v, pos, it) => {
 					const help = v.languageService.getSignatureHelpItems(v.fileName, pos, options);
 					const span = help && v.toExpression(help.applicableSpan);
-					const it = itemAt(fileName, position)!;
 					return help && span
 						? { ...help, applicableSpan: { start: it.textStart + span.start, length: span.length } }
 						: undefined;
@@ -282,7 +255,7 @@ const init = (modules: { typescript: typeof TS }) => {
 				preferences,
 			);
 			const it = itemAt(fileName, start);
-			if (!it || it.reportAt) return prior;
+			if (!it) return prior;
 			const v = service.virtual(it.expression, it.shape);
 			const from = v.toFile(start - it.textStart);
 			const to = v.toFile(end - it.textStart);
@@ -345,12 +318,11 @@ const init = (modules: { typescript: typeof TS }) => {
 
 		proxy.provideInlayHints = (fileName, span, preferences) => {
 			const prior = ls.provideInlayHints(fileName, span, preferences);
-			const visible = itemsFor(fileName).filter(
-				(it) =>
-					it.kind !== 'resolve' &&
-					it.node.getEnd() >= span.start &&
-					it.node.getStart() <= span.start + span.length,
-			);
+			const visible = itemsFor(fileName)
+				.filter(isLiteral)
+				.filter(
+					(it) => it.node.getEnd() >= span.start && it.node.getStart() <= span.start + span.length,
+				);
 			const typeHints: TS.InlayHint[] = visible.map((it) => ({
 				text: `: ${it.analysis.type}`,
 				position: it.node.getEnd(),
@@ -377,12 +349,8 @@ const init = (modules: { typescript: typeof TS }) => {
 		proxy.getEncodedSemanticClassifications = (fileName, span, format) => {
 			const prior = ls.getEncodedSemanticClassifications(fileName, span, format);
 			const spans = [...prior.spans];
-			for (const it of itemsFor(fileName)) {
-				if (
-					it.kind === 'resolve' ||
-					it.node.getEnd() < span.start ||
-					it.node.getStart() > span.start + span.length
-				)
+			for (const it of itemsFor(fileName).filter(isLiteral)) {
+				if (it.node.getEnd() < span.start || it.node.getStart() > span.start + span.length)
 					continue;
 				const v = service.virtual(it.expression, it.shape);
 				for (const b of v.blocks) {

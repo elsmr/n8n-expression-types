@@ -82,7 +82,7 @@ colours. Works in any tsserver editor via tsconfig, or through the VS Code exten
    `.n8n/expressions.d.ts`. The plugin writes it while you type, `check` writes it before `tsc`.
    Absent, resolved types are `any`.
 
-The globals per context follow `workflow-data-proxy.ts` and its callers; `extensions.d.ts`
+The globals per context follow `workflow-data-proxy.ts` and its callers; `extensions.ts`
 is generated from `n8n-workflow`'s own doc metadata.
 
 ## Contexts
