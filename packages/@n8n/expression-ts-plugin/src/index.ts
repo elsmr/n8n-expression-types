@@ -294,12 +294,14 @@ const init = (modules: { typescript: typeof TS }) => {
 			return [...prior, ...mapped];
 		};
 
-		// Keywords and warnings make no sense inside a block; the rest is TypeScript's.
+		// Keywords and warnings make no sense inside a block; the rest is TypeScript's. The spans
+		// say what the completion replaces, so they must point into the real file or the editor
+		// drops every entry.
 		proxy.getCompletionsAtPosition = (fileName, position, options, formatting) =>
 			forward(
 				fileName,
 				position,
-				(v, pos) => {
+				(v, pos, it) => {
 					const inner = v.languageService.getCompletionsAtPosition(
 						v.fileName,
 						pos,
@@ -307,11 +309,25 @@ const init = (modules: { typescript: typeof TS }) => {
 						formatting,
 					);
 					if (!inner) return undefined;
-					const entries = inner.entries.filter(
-						(e) =>
-							e.kind !== ts.ScriptElementKind.warning && e.kind !== ts.ScriptElementKind.keyword,
-					);
-					return { ...inner, isGlobalCompletion: false, isMemberCompletion: true, entries };
+					const mapped = (span: TS.TextSpan | undefined) => {
+						const s = span && v.toExpression(span);
+						return s && { start: it.textStart + s.start, length: s.length };
+					};
+					const entries = inner.entries
+						.filter(
+							(e) =>
+								e.kind !== ts.ScriptElementKind.warning && e.kind !== ts.ScriptElementKind.keyword,
+						)
+						.map((e) =>
+							e.replacementSpan ? { ...e, replacementSpan: mapped(e.replacementSpan) } : e,
+						);
+					return {
+						...inner,
+						isGlobalCompletion: false,
+						isMemberCompletion: true,
+						entries,
+						optionalReplacementSpan: mapped(inner.optionalReplacementSpan),
+					};
 				},
 				() => ls.getCompletionsAtPosition(fileName, position, options, formatting),
 			);

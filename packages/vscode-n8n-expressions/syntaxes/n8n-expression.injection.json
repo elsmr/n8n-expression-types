@@ -4,14 +4,14 @@
 	"patterns": [{ "include": "#block" }],
 	"repository": {
 		"block": {
-			"name": "meta.embedded.block.n8n-expression",
+			"contentName": "meta.embedded.block.n8n-expression",
 			"begin": "\\{\\{",
 			"beginCaptures": {
-				"0": { "name": "punctuation.definition.template-expression.begin.n8n-expression" }
+				"0": { "name": "punctuation.section.embedded.begin.n8n-expression" }
 			},
 			"end": "\\}\\}",
 			"endCaptures": {
-				"0": { "name": "punctuation.definition.template-expression.end.n8n-expression" }
+				"0": { "name": "punctuation.section.embedded.end.n8n-expression" }
 			},
 			"patterns": [{ "include": "source.ts" }]
 		}

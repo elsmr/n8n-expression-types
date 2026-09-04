@@ -87,6 +87,21 @@ try {
 	assert.match(inBlock.body.displayString, /const \$json:/);
 	console.log('ok  tsserver: hover inside a block is forwarded');
 
+	// Cursor mid-word: `$js|on.n`. tsserver turns the span into a line/offset of the real file,
+	// so an unmapped virtual-file span lands on another line and VS Code drops every item.
+	const partial = pos('$json.n }} for', 3);
+	const completions = await request('completionInfo', { file, ...partial });
+	assert.equal(completions.success, true, `completion failed: ${completions.message}`);
+	assert.ok(
+		completions.body.entries.some((e: any) => e.name === '$json'),
+		'$json missing from completions',
+	);
+	assert.deepEqual(completions.body.optionalReplacementSpan, {
+		start: { line: partial.line, offset: partial.offset - 3 },
+		end: { line: partial.line, offset: partial.offset + 2 },
+	});
+	console.log('ok  tsserver: completion spans inside a block are mapped back to the file');
+
 	// geterr answers with events only, no response.
 	srv.stdin.write(
 		JSON.stringify({
