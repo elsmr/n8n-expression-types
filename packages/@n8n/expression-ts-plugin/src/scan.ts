@@ -110,19 +110,22 @@ export const findExpressions = (
 
 	// The text and context come from the Expr type of the argument, so the declaration can
 	// live anywhere; the site itself is where errors are reported.
-	const pushResolve = (exprType: TS.Type, dataType: TS.Type, site: TS.Node) => {
+	// No data argument resolves against `{}`: strict, so only data-free expressions have a type.
+	const pushResolve = (exprType: TS.Type, dataType: TS.Type | undefined, site: TS.Node) => {
 		const brand = brandOf(ts, checker, exprType);
 		if (brand?.text === undefined) return;
-		const shape = shapeFromType(ts, checker, dataType, brand.context);
+		const shape = dataType
+			? shapeFromType(ts, checker, dataType, brand.context)
+			: { ...emptyShape(brand.context), strict: true };
 		found.push({
 			kind: 'resolve',
 			node: site,
 			expression: brand.text,
 			context: shape.context,
 			shape,
-			dataText: portable(
-				checker.typeToString(dataType, undefined, ts.TypeFormatFlags.NoTruncation),
-			),
+			dataText: dataType
+				? portable(checker.typeToString(dataType, undefined, ts.TypeFormatFlags.NoTruncation))
+				: '{}',
 		});
 	};
 
@@ -141,8 +144,12 @@ export const findExpressions = (
 				ts.forEachChild(node, visit);
 				return;
 			}
-			if (ts.isIdentifier(callee) && callee.text === 'resolve' && first && second) {
-				pushResolve(checker.getTypeAtLocation(first), checker.getTypeAtLocation(second), node);
+			if (ts.isIdentifier(callee) && callee.text === 'resolve' && first) {
+				pushResolve(
+					checker.getTypeAtLocation(first),
+					second && checker.getTypeAtLocation(second),
+					node,
+				);
 			}
 		} else if (
 			ts.isTypeReferenceNode(node) &&
@@ -150,10 +157,10 @@ export const findExpressions = (
 			node.typeName.text === 'Resolve'
 		) {
 			const [exprArg, dataArg] = node.typeArguments ?? [];
-			if (exprArg && dataArg) {
+			if (exprArg) {
 				pushResolve(
 					checker.getTypeFromTypeNode(exprArg),
-					checker.getTypeFromTypeNode(dataArg),
+					dataArg && checker.getTypeFromTypeNode(dataArg),
 					node,
 				);
 			}

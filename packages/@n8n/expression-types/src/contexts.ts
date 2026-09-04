@@ -1,7 +1,7 @@
 // What an n8n expression can see, per context, as TypeScript interfaces over a runtime
 // sample `R`. The lambda form takes them as its parameter type; the string form gets them
-// declared as globals in its virtual file (service.ts). A hole `R` does not fill is
-// N8nLooseJson (any): JSON-legal, unchecked.
+// declared as globals in its virtual file (service.ts). A hole `R` does not fill is `H`:
+// N8nLooseJson (any) at expr() time, `never` against resolve() data, where a hole is an error.
 //
 // Sources: packages/workflow/src/workflow-data-proxy.ts, packages/core/.../
 // get-additional-keys.ts, routing-node.ts, request-helpers/pagination.ts.
@@ -14,7 +14,7 @@ export type NodeRuntime = {
 	params?: Json;
 };
 
-/** Sample values. Types are derived from them. Everything is optional: missing means loose. */
+/** Sample values. Types are derived from them. Everything is optional: a hole is `H` in the context. */
 export type RuntimeTypes = {
 	context?: ExpressionContext;
 	/** Current input item: $json, $binary, $input, $item, $items(). */
@@ -39,30 +39,35 @@ export type RuntimeTypes = {
 
 type Prop<R, K extends string> = K extends keyof R ? Exclude<R[K], undefined> : never;
 type Or<V, Fallback> = [V] extends [never] ? Fallback : V;
-/** The sample's type for `K`; loose when the sample has none. */
-type Data<R, K extends string> = Or<Prop<R, K>, N8nLooseJson>;
-/** ['a', 'b'] as const → 'a' | 'b'; anything else means "any key". */
-type Keys<K> = [K] extends [readonly (infer S extends string)[]]
+/** The sample's type for `K`; the hole `H` when the sample has none. */
+type Data<R, K extends string, H> = Or<Prop<R, K>, H>;
+/** ['a', 'b'] as const → 'a' | 'b'; anything else means "any key", or no key when H is never. */
+type Keys<K, H> = [K] extends [readonly (infer S extends string)[]]
 	? [S] extends [never]
-		? string
+		? AnyKey<H>
 		: S
-	: string;
+	: AnyKey<H>;
+type AnyKey<H> = [H] extends [never] ? never : string;
 
 type Input<R> = Prop<R, 'input'>;
 type Nodes<R> = Or<Prop<R, 'nodes'>, {}>;
-type NodeData<N> = N8nNodeData<Data<N, 'json'>, Keys<Prop<N, 'binaryKeys'>>, Data<N, 'params'>>;
+type NodeData<N, H> = N8nNodeData<
+	Data<N, 'json', H>,
+	Keys<Prop<N, 'binaryKeys'>, H>,
+	Data<N, 'params', H>
+>;
 
 // ---------- contexts ----------
 
-interface CommonContext<R> {
+interface CommonContext<R, H> {
 	/** The current date and time as a Luxon DateTime, in the workflow timezone. */
 	$now: DateTime;
 	/** Today at midnight as a Luxon DateTime, in the workflow timezone. */
 	$today: DateTime;
 	/** Workflow variables, all strings. */
-	$vars: Record<Keys<Prop<R, 'vars'>>, string>;
+	$vars: Record<Keys<Prop<R, 'vars'>, H>, string>;
 	/** Environment variables, when access is allowed. */
-	$env: Record<Keys<Prop<R, 'env'>>, string>;
+	$env: Record<Keys<Prop<R, 'env'>, H>, string>;
 	/** External secrets by provider, when enabled. */
 	$secrets: Record<string, Record<string, any>>;
 	/** Data about the current execution: id, mode, resume URLs, customData. */
@@ -81,32 +86,32 @@ interface CommonContext<R> {
 }
 
 /** Node parameter values: runs per item with $json, $input, $('Node'), ... */
-export interface NodeParameterContext<R = {}> extends CommonContext<R> {
+export interface NodeParameterContext<R = {}, H = N8nLooseJson> extends CommonContext<R, H> {
 	/** JSON data of the current input item. */
-	$json: Data<Input<R>, 'json'>;
+	$json: Data<Input<R>, 'json', H>;
 	/** @deprecated use $json */
-	$data: Data<Input<R>, 'json'>;
+	$data: Data<Input<R>, 'json', H>;
 	/** Binary data of the current input item, by property name. */
-	$binary: Record<Keys<Prop<Input<R>, 'binaryKeys'>>, N8nBinaryData>;
+	$binary: Record<Keys<Prop<Input<R>, 'binaryKeys'>, H>, N8nBinaryData>;
 	/** The current node's input: item, first(), last(), all(), params. */
 	$input: N8nInput<
-		Data<Input<R>, 'json'>,
-		Keys<Prop<Input<R>, 'binaryKeys'>>,
-		Data<R, 'parameters'>
+		Data<Input<R>, 'json', H>,
+		Keys<Prop<Input<R>, 'binaryKeys'>, H>,
+		Data<R, 'parameters', H>
 	>;
 	/** The current input item, json and binary. */
-	$thisItem: N8nItem<Data<Input<R>, 'json'>, Keys<Prop<Input<R>, 'binaryKeys'>>>;
+	$thisItem: N8nItem<Data<Input<R>, 'json', H>, Keys<Prop<Input<R>, 'binaryKeys'>, H>>;
 	/** Output of another node in the workflow: item, first(), last(), all(), params, isExecuted. */
-	$<K extends keyof Nodes<R>>(nodeName: K, resolveFullItem?: boolean): NodeData<Nodes<R>[K]>;
-	$(nodeName?: string, resolveFullItem?: boolean): N8nAnyNodeData;
+	$<K extends keyof Nodes<R>>(nodeName: K, resolveFullItem?: boolean): NodeData<Nodes<R>[K], H>;
+	$(nodeName?: string, resolveFullItem?: boolean): [H] extends [never] ? never : N8nAnyNodeData;
 	/** @deprecated use $('Node') */
 	$node: {
 		[K in keyof Nodes<R>]: N8nLegacyNode<
-			Data<Nodes<R>[K], 'json'>,
-			Keys<Prop<Nodes<R>[K], 'binaryKeys'>>,
-			Data<Nodes<R>[K], 'params'>
+			Data<Nodes<R>[K], 'json', H>,
+			Keys<Prop<Nodes<R>[K], 'binaryKeys'>, H>,
+			Data<Nodes<R>[K], 'params', H>
 		>;
-	} & Record<string, N8nLegacyNode<N8nLooseJson, string, N8nLooseJson>>;
+	} & Record<AnyKey<H>, N8nLegacyNode<N8nLooseJson, string, N8nLooseJson>>;
 	$items(
 		nodeName?: string,
 		outputIndex?: number,
@@ -115,8 +120,8 @@ export interface NodeParameterContext<R = {}> extends CommonContext<R> {
 	/** @deprecated */
 	$item(itemIndex: number, runIndex?: number): any;
 	/** The current node's parameters, resolved. */
-	$parameter: Data<R, 'parameters'>;
-	$rawParameter: Data<R, 'parameters'>;
+	$parameter: Data<R, 'parameters', H>;
+	$rawParameter: Data<R, 'parameters', H>;
 	/** Index of the item this expression runs for. */
 	$itemIndex: number;
 	/** How many times the current node has run in this execution. */
@@ -152,45 +157,46 @@ export interface NodeParameterContext<R = {}> extends CommonContext<R> {
 }
 
 /** HTTP Request pagination options (request-helpers/pagination.ts). */
-export interface HttpPaginationContext<R = {}> extends NodeParameterContext<R> {
+export interface HttpPaginationContext<R = {}, H = N8nLooseJson>
+	extends NodeParameterContext<R, H> {
 	/** The HTTP request as sent: url, method, headers, qs, body. */
-	$request: N8nHttpRequest<Data<R, 'request'>>;
+	$request: N8nHttpRequest<Data<R, 'request', H>>;
 	/** The HTTP response: body, headers, statusCode. */
-	$response: N8nHttpResponse<Data<R, 'response'>>;
+	$response: N8nHttpResponse<Data<R, 'response', H>>;
 	$version: number;
 	/** Number of pages fetched so far, starting at 0. */
 	$pageCount: number;
 }
 
 /** Declarative node routing (routing-node.ts): request, send, output and postReceive expressions. */
-export interface RoutingContext<R = {}> extends NodeParameterContext<R> {
+export interface RoutingContext<R = {}, H = N8nLooseJson> extends NodeParameterContext<R, H> {
 	/** Decrypted credential fields of the credential used by this node. */
-	$credentials: Data<R, 'credentials'>;
+	$credentials: Data<R, 'credentials', H>;
 	/** The current value of the parameter this routing expression belongs to. */
-	$value: Data<R, 'value'>;
+	$value: Data<R, 'value', H>;
 	$version: number;
 	/** The HTTP response: body, headers, statusCode. */
-	$response: N8nHttpResponse<Data<R, 'response'>>;
+	$response: N8nHttpResponse<Data<R, 'response', H>>;
 	/** One item of the parsed response, in postReceive expressions. */
-	$responseItem: Data<R, 'responseItem'>;
+	$responseItem: Data<R, 'responseItem', H>;
 	/** The HTTP request as sent: url, method, headers, qs, body. */
-	$request: N8nHttpRequest<Data<R, 'request'>>;
-	$self: Data<R, 'credentials'>;
+	$request: N8nHttpRequest<Data<R, 'request', H>>;
+	$self: Data<R, 'credentials', H>;
 }
 
 /** Node description fields (subtitle, outputs): the node's parameters, no item data. */
-export interface DescriptionContext<R = {}> extends CommonContext<R> {
+export interface DescriptionContext<R = {}, H = N8nLooseJson> extends CommonContext<R, H> {
 	/** The current node's parameters, resolved. */
-	$parameter: Data<R, 'parameters'>;
-	$rawParameter: Data<R, 'parameters'>;
+	$parameter: Data<R, 'parameters', H>;
+	$rawParameter: Data<R, 'parameters', H>;
 	$nodeVersion: number;
 	$nodeId: string;
-	$self: Data<R, 'credentials'>;
+	$self: Data<R, 'credentials', H>;
 }
 
 /** Credential fields: $self is the credential; $vars and $secrets from the common set. */
-export interface CredentialContext<R = {}> extends CommonContext<R> {
-	$self: Data<R, 'credentials'>;
+export interface CredentialContext<R = {}, H = N8nLooseJson> extends CommonContext<R, H> {
+	$self: Data<R, 'credentials', H>;
 }
 
 // ---------- registry ----------
@@ -199,17 +205,21 @@ export interface CredentialContext<R = {}> extends CommonContext<R> {
 // expr.<name>() exists.
 
 declare global {
-	interface N8nExpressionContexts<R> {
-		nodeParameter: NodeParameterContext<R>;
-		httpPagination: HttpPaginationContext<R>;
-		routing: RoutingContext<R>;
-		description: DescriptionContext<R>;
-		credential: CredentialContext<R>;
+	interface N8nExpressionContexts<R, H = N8nLooseJson> {
+		nodeParameter: NodeParameterContext<R, H>;
+		httpPagination: HttpPaginationContext<R, H>;
+		routing: RoutingContext<R, H>;
+		description: DescriptionContext<R, H>;
+		credential: CredentialContext<R, H>;
 	}
 }
 
 export type ExpressionContext = keyof N8nExpressionContexts<{}> & string;
-export type ContextByName<N extends ExpressionContext, R = {}> = N8nExpressionContexts<R>[N];
+export type ContextByName<
+	N extends ExpressionContext,
+	R = {},
+	H = N8nLooseJson,
+> = N8nExpressionContexts<R, H>[N];
 export type ContextType = ContextByName<ExpressionContext>;
 /** The registry key of a context interface. Mutual `extends`, since contexts extend each other. */
 export type ContextName<C> = {
@@ -235,6 +245,8 @@ export const isContextName = (s: string | undefined): s is ExpressionContext =>
 /** RuntimeTypes with every value already rendered as type text, so the checker's types fit too. */
 export type RuntimeShape = {
 	context: ExpressionContext;
+	/** From resolve() data: holes are `never`, so reaching into them is an error. */
+	strict?: boolean;
 	inputJson?: string;
 	inputBinaryKeys?: readonly string[];
 	nodes: Record<string, { json: string; binaryKeys?: readonly string[]; params?: string }>;

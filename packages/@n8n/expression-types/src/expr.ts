@@ -133,9 +133,9 @@ export type ContextOf<X> = X extends Expression<any, infer C extends ContextType
 /**
  * The type `X` yields against data `D`, from the generator's record of this exact pairing.
  * Unknown pairing (not generated yet, D is not portable, or X is a lambda) falls back to
- * the type X carries.
+ * the type X carries. No `D` is `{}`: strict, for expressions that need no data.
  */
-export type Resolve<X extends AnyExpr, D> = X extends {
+export type Resolve<X extends AnyExpr, D = {}> = X extends {
 	readonly __n8n?: {
 		type: infer T;
 		context: (c: infer C extends ContextType) => any;
@@ -148,9 +148,9 @@ export type Resolve<X extends AnyExpr, D> = X extends {
 	: never;
 
 /** Evaluation belongs to n8n's Expression class; this carries the types only. */
-export const resolve = <X extends AnyExpr, D extends DataFor<ContextOf<X>>>(
+export const resolve = <X extends AnyExpr, D extends DataFor<ContextOf<X>> = {}>(
 	_expression: X,
-	_data: D,
+	_data?: D,
 ): Resolve<X, D> => {
 	throw new Error('resolve() is a typed stub; evaluate with n8n');
 };

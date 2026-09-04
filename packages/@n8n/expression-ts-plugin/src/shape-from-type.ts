@@ -79,6 +79,7 @@ export const shapeFromType = (
 
 	return {
 		context,
+		strict: true,
 		inputJson: input ? optText(prop(input, 'json')) : undefined,
 		inputBinaryKeys: input ? literals(prop(input, 'binaryKeys')) : undefined,
 		nodes,

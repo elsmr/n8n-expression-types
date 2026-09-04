@@ -144,7 +144,7 @@ export const createExpressionService = ({ ts, root }: Options) => {
 	const service = ts.createLanguageService(host, ts.createDocumentRegistry());
 
 	const contextType = (context: ExpressionContext, shape?: RuntimeShape) =>
-		`N8nExpressionContexts<${shape ? renderShape(shape) : '{}'}>[${JSON.stringify(context)}]`;
+		`N8nExpressionContexts<${shape ? renderShape(shape) : '{}'}, ${shape?.strict ? 'never' : 'N8nLooseJson'}>[${JSON.stringify(context)}]`;
 
 	// The interface's members, with docs, read once per context through the checker: the
 	// list of names is what `declare const` needs and the type system cannot hand over.
@@ -193,7 +193,13 @@ export const createExpressionService = ({ ts, root }: Options) => {
 	const MEMO_LIMIT = 10_000;
 	const analyses = new Map<string, Analysis>();
 	const analyze = (expression: string, shape: RuntimeShape, expected?: string): Analysis => {
-		const key = JSON.stringify([shape.context, renderShape(shape), expected, expression]);
+		const key = JSON.stringify([
+			shape.context,
+			shape.strict,
+			renderShape(shape),
+			expected,
+			expression,
+		]);
 		const hit = analyses.get(key);
 		if (hit) return hit;
 		if (analyses.size >= MEMO_LIMIT) analyses.clear();

@@ -13,7 +13,7 @@ import {
 	type NodeParameterContext,
 	type Resolve,
 } from '@n8n/expression-types';
-import { badGlobal, loose, nextUrl, total, typo } from './demo.ts';
+import { badGlobal, loose, nextUrl, total, typo, when } from './demo.ts';
 import { paginationSample, sample } from './sample-data.ts';
 
 type Expect<T extends true> = T;
@@ -53,7 +53,10 @@ export type Cases = [
 		>
 	>,
 	Expect<Equal<ReturnType<typeof resolve<typeof total, typeof sample>>, number>>,
-	Expect<IsAny<Resolve<typeof loose, {}>>>, // no data: loose stays any
+	Expect<Equal<Resolve<typeof loose, {}> extends N8nResolveError ? true : false, true>>, // resolve() data is strict: no $json at all
+	Expect<Equal<Resolve<typeof loose> extends N8nResolveError ? true : false, true>>,
+	Expect<Equal<Resolve<typeof when>, string>>, // needs no data
+	Expect<Equal<ReturnType<typeof resolve<typeof when>>, string>>,
 	Expect<Equal<Resolve<typeof loose, typeof sample> extends N8nResolveError ? true : false, true>>, // real data: $json.whatever does not exist
 	ExpectFalse<Equal<Resolve<typeof loose, typeof sample>, number>>,
 	Expect<Equal<typeof lambda, LambdaExpr<NodeParameterContext, number>>>,
